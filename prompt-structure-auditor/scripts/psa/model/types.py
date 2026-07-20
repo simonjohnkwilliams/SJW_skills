@@ -37,6 +37,8 @@ class Segment:
     confidence: str
     evidence: tuple[Evidence, ...]
     text: str = ""
+    is_prefix_poison: bool = False
+    is_worklog: bool = False
 
 
 @dataclass(frozen=True)

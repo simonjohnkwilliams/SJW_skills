@@ -116,6 +116,25 @@ def render_human(audit) -> str:
     lines.append("")
     lines.append(render_inventory(audit.inventory).rstrip())
     lines.append("")
+
+    instruction_present = any(r.status == "present" for r in audit.inventory.rows)
+    lines.append("Executive Summary")
+    if not instruction_present:
+        lines.append(
+            "  No prompt instruction surface found "
+            "(no CLAUDE.md / AGENTS.md / Cursor rules / Copilot instructions)."
+        )
+        lines.append("  Honest empty result: nothing to structurally audit.")
+    else:
+        by_pri: dict[str, int] = {}
+        for f in audit.findings:
+            by_pri[f.priority] = by_pri.get(f.priority, 0) + 1
+        lines.append(f"  Findings: {len(audit.findings)}")
+        for band in ("High value", "Medium value", "Low value", "Informational"):
+            if band in by_pri:
+                lines.append(f"  {band}: {by_pri[band]}")
+    lines.append("")
+
     lines.append("Findings")
     if not audit.findings:
         lines.append("  (none)")
@@ -139,4 +158,14 @@ def render_human(audit) -> str:
         "  This audit reports structure observable from repository contents. "
         "It does not measure or predict cache hit rate, cost, or latency."
     )
+    graph = getattr(audit, "dependency_graph", None)
+    if graph and graph.roadmap:
+        lines.append("")
+        lines.append("Implementation Roadmap")
+        for i, n in enumerate(graph.roadmap, 1):
+            lines.append(f"  {i}. [{n.rule_id}] {n.action[:120]}")
+        if graph.cycles:
+            lines.append("  Cycles detected (not silently broken):")
+            for c in graph.cycles:
+                lines.append(f"    {', '.join(c)}")
     return "\n".join(lines).rstrip() + "\n"

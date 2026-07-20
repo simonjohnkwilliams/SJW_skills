@@ -1,4 +1,4 @@
-"""Core Engine pipeline: discover → model → rules → findings → audit."""
+"""Core Engine pipeline: discover → model → rules → findings → recommend → audit."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -9,6 +9,7 @@ from psa.core.ports import RepoFS
 from psa.discovery import discover
 from psa.findings import Finding, normalize_findings
 from psa.model.builder import build_model
+from psa.recommend.graph import DependencyGraph, build_recommendations
 from psa.report.inventory import PromptSurfaceInventory, build_inventory
 from psa.rules import run_rules
 
@@ -32,13 +33,14 @@ class Audit:
     meta: RunMeta
     findings: tuple[Finding, ...]
     inventory: PromptSurfaceInventory
+    dependency_graph: DependencyGraph
 
     def to_dict(self) -> dict:
         return {
             "meta": self.meta.to_dict(),
             "inventory": self.inventory.to_dict(),
             "findings": [f.to_dict() for f in self.findings],
-            "dependency_graph": {"nodes": [], "edges": []},
+            "dependency_graph": self.dependency_graph.to_dict(),
         }
 
 
@@ -54,6 +56,7 @@ def analyze(
     raw = run_rules(model, cfg)
     findings = normalize_findings(raw)
     inventory = build_inventory(sources)
+    graph = build_recommendations(findings)
     return Audit(
         meta=RunMeta(
             tool_version=version,
@@ -62,4 +65,5 @@ def analyze(
         ),
         findings=findings,
         inventory=inventory,
+        dependency_graph=graph,
     )

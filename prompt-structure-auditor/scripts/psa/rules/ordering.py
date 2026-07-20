@@ -1,4 +1,4 @@
-"""ORDERING pack — ORDER001 early volatility."""
+"""ORDERING pack — ORDER001 early prefix-poisoning volatility."""
 from __future__ import annotations
 
 from typing import Iterable
@@ -10,7 +10,11 @@ from psa.model.types import Evidence, PromptModel, Segment
 
 
 def check_order001(model: PromptModel, _config: ConfigView) -> Iterable[Finding]:
-    # Within each source path, if a volatile segment precedes a later stable segment.
+    """Raise when a *prefix-poison* volatile segment appears before later stable content.
+
+    Worklog headings (On Hold, Debugging, Known Issue) are intentionally ignored
+    here — they are STYLE001 concerns, not ORDER001.
+    """
     by_path: dict[str, list[Segment]] = {}
     for seg in model.segments:
         by_path.setdefault(seg.provenance.path, []).append(seg)
@@ -19,14 +23,18 @@ def check_order001(model: PromptModel, _config: ConfigView) -> Iterable[Finding]
     for path, segs in sorted(by_path.items()):
         segs = sorted(segs, key=lambda s: s.order)
         for i, seg in enumerate(segs):
-            if seg.stability != "volatile":
+            if not seg.is_prefix_poison:
                 continue
-            # skip frontmatter / preamble-only noise unless clearly volatile heading
+            if seg.stability not in {"volatile", "mixed"}:
+                continue
             anchor = seg.provenance.anchor[0] if seg.provenance.anchor else ""
             if anchor in {"(frontmatter)", "(preamble)", "(rule body)"}:
-                # rule bodies that only *reference* volatile paths are classified stable
                 continue
-            later_stable = [s for s in segs[i + 1 :] if s.stability == "stable"]
+            later_stable = [
+                s
+                for s in segs[i + 1 :]
+                if s.stability == "stable" and not s.is_worklog
+            ]
             if not later_stable:
                 continue
             stable = later_stable[0]
@@ -62,8 +70,8 @@ def check_order001(model: PromptModel, _config: ConfigView) -> Iterable[Finding]
                     ),
                     explanation=(
                         "Content before the first change is what a prompt cache can reuse. "
-                        "Placing volatile content ahead of stable material puts the stable "
-                        "sections behind a frequent change point."
+                        "Placing session-dynamic content ahead of stable material puts the "
+                        "stable sections behind a frequent change point."
                     ),
                     recommendation=(
                         f'Move "{anchor}" below stable sections (e.g. '

@@ -9,8 +9,17 @@ Primary flow is now CSV upload for bank transactions.
 - Headers: Date, Description, Money In, Money Out
 - Date: DD/MM/YYYY
 
+## TrueLayer (On Hold – Can Return)
+TrueLayer integration is implemented but de-prioritised.
+
 ## Decision: Try Live Environment
-Debugging invalid client_id continues. Known Issue remains.
+Debugging notes for later.
+
+## Debugging invalid client_id
+Sandbox continues to return invalid client_id.
+
+## Known Issue: Sandbox invalid client_id
+Despite correct setup, sandbox auth fails.
 
 ## TrueLayer Setup
 ### Console Configuration

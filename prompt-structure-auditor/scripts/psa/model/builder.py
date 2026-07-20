@@ -99,6 +99,8 @@ def build_model(sources: tuple[Source, ...]):
                 confidence=clf.confidence,
                 evidence=(Evidence(path=path, span=(start, end), excerpt=(heading + "\n" + body)[:160]),),
                 text=body if body else heading,
+                is_prefix_poison=clf.is_prefix_poison,
+                is_worklog=clf.is_worklog,
             )
             segments.append(seg)
             local_ids.append(sid)
