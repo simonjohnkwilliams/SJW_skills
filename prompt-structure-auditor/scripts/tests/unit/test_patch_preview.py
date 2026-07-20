@@ -18,6 +18,14 @@ def test_preview_order001_produces_diff():
     assert patch.finding_id == order.id
 
 
+def test_preview_order001_by_rule_id():
+    fs = LocalRepoFS(FIXTURES / "vr3_demo")
+    audit = analyze(fs, tool_version="0.1.0")
+    patch = preview_patch(fs, audit, "ORDER001")
+    assert patch.rule_id == "ORDER001"
+    assert "Current Focus" in patch.diff
+
+
 def test_preview_refuses_non_patchable():
     fs = LocalRepoFS(FIXTURES / "vr3_demo")
     audit = analyze(fs, tool_version="0.1.0")

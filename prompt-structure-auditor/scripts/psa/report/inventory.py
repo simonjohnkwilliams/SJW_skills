@@ -133,6 +133,46 @@ def render_human(audit) -> str:
         for band in ("High value", "Medium value", "Low value", "Informational"):
             if band in by_pri:
                 lines.append(f"  {band}: {by_pri[band]}")
+
+    graph = getattr(audit, "dependency_graph", None)
+    if graph and graph.roadmap:
+        lines.append("")
+        lines.append("Fix these first (roadmap)")
+        # Headline: first unique rule ids in roadmap order (usability)
+        seen_rules: list[str] = []
+        headlines: list = []
+        for n in graph.roadmap:
+            if n.rule_id in seen_rules:
+                continue
+            seen_rules.append(n.rule_id)
+            headlines.append(n)
+            if len(headlines) >= 3:
+                break
+        for i, n in enumerate(headlines, 1):
+            lines.append(f"  {i}. [{n.rule_id}] {n.action[:140]}")
+        remaining_rules = [n.rule_id for n in graph.roadmap if n.rule_id not in seen_rules[:3]]
+        # count unique remaining rule ids after the headline set
+        extra = []
+        for rid in [n.rule_id for n in graph.roadmap]:
+            if rid not in {h.rule_id for h in headlines} and rid not in extra:
+                extra.append(rid)
+        if extra:
+            lines.append(
+                f"  ... then {len(extra)} more rule(s) after the above "
+                "(see Implementation Roadmap)."
+            )
+        if graph.edges:
+            lines.append("  Dependencies")
+            seen: set[tuple[str, str]] = set()
+            for e in graph.edges:
+                key = (e.src_rule, e.dst_rule)
+                if key in seen or not e.src_rule:
+                    continue
+                seen.add(key)
+                lines.append(
+                    f"    - Do not apply [{e.dst_rule}] until [{e.src_rule}] "
+                    f"({e.reason})."
+                )
     lines.append("")
 
     lines.append("Findings")
@@ -158,7 +198,6 @@ def render_human(audit) -> str:
         "  This audit reports structure observable from repository contents. "
         "It does not measure or predict cache hit rate, cost, or latency."
     )
-    graph = getattr(audit, "dependency_graph", None)
     if graph and graph.roadmap:
         lines.append("")
         lines.append("Implementation Roadmap")

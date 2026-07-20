@@ -39,8 +39,11 @@ def main(argv: list[str] | None = None) -> int:
 
     p_patch = sub.add_parser("patch", help="Patch operations (preview only in this release)")
     patch_sub = p_patch.add_subparsers(dest="patch_cmd", required=True)
-    p_prev = patch_sub.add_parser("preview", help="Preview mechanical patch for a finding")
-    p_prev.add_argument("finding_id", help="Finding id from audit JSON")
+    p_prev = patch_sub.add_parser("preview", help="Preview mechanical patch for a finding or rule id")
+    p_prev.add_argument(
+        "finding_id",
+        help="Finding id (f_…) or rule id (e.g. ORDER001) from audit output",
+    )
     p_prev.add_argument("path", nargs="?", default=".", help="Repository path")
 
     args = parser.parse_args(argv)

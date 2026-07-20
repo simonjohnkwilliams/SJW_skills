@@ -18,12 +18,26 @@ class Patch:
     new_text: str
 
 
-def preview_patch(repo: RepoFS, audit: Audit, finding_id: str) -> Patch:
-    finding = next((f for f in audit.findings if f.id == finding_id), None)
-    if finding is None:
-        raise ValueError(f"unknown finding id: {finding_id}")
+def resolve_finding(audit: Audit, finding_or_rule: str) -> Finding:
+    """Resolve a finding by id, or the first patchable finding for a rule id."""
+    key = finding_or_rule.strip()
+    by_id = next((f for f in audit.findings if f.id == key), None)
+    if by_id is not None:
+        return by_id
+    by_rule = [f for f in audit.findings if f.rule_id.upper() == key.upper()]
+    if not by_rule:
+        raise ValueError(f"unknown finding id or rule id: {finding_or_rule}")
+    patchable = [f for f in by_rule if f.patchable and f.ownership == "user"]
+    chosen = patchable[0] if patchable else by_rule[0]
+    return chosen
+
+
+def preview_patch(repo: RepoFS, audit: Audit, finding_or_rule: str) -> Patch:
+    finding = resolve_finding(audit, finding_or_rule)
     if not finding.patchable or finding.ownership != "user":
-        raise ValueError(f"finding {finding_id} is not patchable by the user")
+        raise ValueError(
+            f"finding {finding.id} ({finding.rule_id}) is not patchable by the user"
+        )
     if finding.rule_id == "ORDER001":
         return _preview_order001(repo, finding)
     raise ValueError(f"no mechanical patch generator for {finding.rule_id}")

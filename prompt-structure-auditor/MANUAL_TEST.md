@@ -1,116 +1,71 @@
-# Manual test plan — Prompt Structure Auditor
+# Manual test plan — current handoff
 
-Branch: `feat/prompt-structure-auditor`
+**Built through: Release 3 (Preview), plus partial Release 6 (baseline/diff).**  
+**Not built: Release 4 Validate, Release 5 Apply, CI.**
 
-Automated suite: **85 tests** (acceptance A–I + unit/functional/determinism + recommend/lifecycle/patch preview).
+Automated: `cd scripts; $env:PYTHONPATH=(Get-Location).Path; python -m pytest`  
+User guide: [QUICKSTART.md](QUICKSTART.md)
 
-## Phase 1 sign-off status
+## What was performed (engineering)
 
-| Criterion | Status |
-|-----------|--------|
-| All automated tests pass | ✅ 85 passed |
-| Acceptance suite covers A/D/P/R/REP/G/CLI/I | ✅ `tests/acceptance/test_phase1_acceptance.py` |
-| VR1/VR2/VR3 expected findings | ✅ fixtures + live smokes |
-| Deterministic / read-only / immutable model | ✅ A001–A003 |
-| Evidence + ownership + verification; no fabricated metrics | ✅ REP/I |
-| ORDER001 not noisy on On Hold / Debugging | ✅ fixed + regression (G003) |
+| Item | Done |
+|------|------|
+| R1 Discovery, model, rules, inventory, human+JSON audit, determinism | Yes |
+| Phase 1 acceptance suite (A–I) | Yes |
+| ORDER001 false-positive fix (On Hold / Debugging) | Yes |
+| R2 Roadmap + “Fix these first” + dependency hints in report | Yes |
+| R3 `psa patch preview ORDER001` (also accepts finding id) | Yes |
+| R6 `baseline save` / `diff` | Yes |
+| R4 validate / R5 apply | No |
 
-## What was constructed
+## What you should manually test
 
-| Area | Status |
-|------|--------|
-| Core Engine + discovery + Prompt Model | Done |
-| Inventory / audit CLI | Done |
-| Rules ORDER001, ACT001/002, STYLE001, DUP001 | Done |
-| Phase 1 acceptance suite | Done |
-| Recommendation dependency graph + roadmap | Done |
-| Baseline save + audit diff CLI | Done |
-| Patch **preview** (ORDER001 mechanical move) | Done |
-| Patch validate / apply | **Not built** |
-| OWNERSHIP / CONTRADICTION / VOL named rules | **Not built** |
-| CI workflow | **Not built** |
-
-### Documented ORDER001 edge case (closed)
-
-Previously, headings like "On Hold" / "Debugging" / "Known Issue" were classified as ORDER001 prefix poison.  
-**Fix:** only *session-dynamic* signals (`Current Focus`, sprint/ticket/date/session counter) raise ORDER001. Worklog headings feed STYLE001 instead. Regression: `test_G003_*`.
-
-## Run automated tests
+### 1) R1 — Audit
 
 ```powershell
 cd c:\Users\simon\cursor\SJW_skills\prompt-structure-auditor\scripts
 $env:PYTHONPATH = (Get-Location).Path
-python -m pytest
+python -m psa inventory .\tests\fixtures\vr3_demo
+python -m psa audit .\tests\fixtures\vr3_demo
+python -m psa audit .\tests\fixtures\vr3_demo --format json
 ```
 
-## Manual tests
+Expect inventory + findings + honesty note; JSON has `findings` / no scores.
 
-### M1 — Determinism (A001)
+Live (optional): VR1 empty honesty; VR2 ACT; VR3 ORDER+STYLE+DUP without ORDER on “On Hold”.
+
+### 2) R2 — Prioritise
+
+In the text audit, expect **Fix these first (roadmap)** and **Dependencies** lines
+(e.g. don’t apply ORDER001 until STYLE/DUP where edged).
+
+### 3) R3 — Preview (no writes)
 
 ```powershell
-python -m psa audit .\tests\fixtures\vr3_demo --format json --out a.json
-python -m psa audit .\tests\fixtures\vr3_demo --format json --out b.json
-fc /b a.json b.json
+git status --porcelain   # in a throwaway copy if needed
+python -m psa patch preview ORDER001 .\tests\fixtures\vr3_demo
+git status --porcelain   # unchanged
 ```
 
-### M2 — Read-only (A002)
+Expect unified diff only.
+
+### 4) Confirm unavailable
 
 ```powershell
-cd <any-git-repo>
-git status --porcelain
-python -m psa audit .
-git status --porcelain
+python -m psa patch validate ORDER001   # should fail (unknown command)
+python -m psa patch apply ORDER001      # should fail
 ```
 
-Expect unchanged working tree (unless `--out`).
-
-### M3 — Live VR3
+### 5) R6 partial
 
 ```powershell
-python -m psa audit "C:\Users\simon\OneDrive\demo\demo" --format text
+python -m psa baseline save .\tests\fixtures\empty_repo --out empty.json
+python -m psa diff .\tests\fixtures\vr3_demo --baseline empty.json
 ```
 
-Expect: one genuine ORDER001 on Current Focus; STYLE001; DUP001; **no** ORDER001 on On Hold/Debugging/Known Issue; roadmap section present.
+Expect Introduced > 0.
 
-### M4 — Live VR2
+## Skill smoke (Cursor)
 
-```powershell
-python -m psa audit "C:\Users\simon\IdeaProjects\lateTrainQueries" --format text
-```
-
-Expect: ACT001/ACT002; DUP; no ORDER001 from `_bmad-output` references.
-
-### M5 — Live VR1
-
-```powershell
-python -m psa inventory "C:\Users\simon\IdeaProjects\ai-context-benchmark"
-python -m psa audit "C:\Users\simon\IdeaProjects\ai-context-benchmark" --format text
-```
-
-Expect: honest empty instruction surface; research out of scope.
-
-### M6 — Baseline / diff
-
-```powershell
-python -m psa baseline save .\tests\fixtures\empty_repo --out empty-base.json
-python -m psa diff .\tests\fixtures\vr3_demo --baseline empty-base.json
-```
-
-Expect: Introduced > 0.
-
-### M7 — Patch preview (no write)
-
-```powershell
-python -m psa audit .\tests\fixtures\vr3_demo --format json --out audit.json
-# copy an ORDER001 id from audit.json, then:
-python -m psa patch preview <FINDING_ID> .\tests\fixtures\vr3_demo
-```
-
-Expect: unified diff only; working tree unchanged.
-
-## Suggested next work
-
-1. Patch validate (re-audit scratch; must-not-worsen invariant)
-2. Patch apply (branch + one commit)
-3. OWNERSHIP / CONTRADICTION packs
-4. CI workflow + root README skill table update
+1. `/prompt-structure-auditor` → agent runs inventory + audit + explains roadmap; stops before apply.  
+2. `/prompt-structure-auditor preview ORDER001` → shows diff only.
