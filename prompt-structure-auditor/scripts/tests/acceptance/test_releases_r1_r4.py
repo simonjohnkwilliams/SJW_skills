@@ -94,17 +94,18 @@ class TestRelease1Audit:
         name, path, _ = target
         audit = analyze(LocalRepoFS(path), tool_version="0.1.0")
         text = render_audit(audit, repo_name=name)
-        assert "Honesty note" in text
-        assert "psa doctor" in text
-        assert "Repository" in text
-        assert "Prompt Sources" in text
+        assert "Summary" in text
+        assert "Findings" in text
+        assert "| Field | Result |" in text
+        assert "Honesty note" not in text
+        assert "psa doctor" not in text
 
     def test_r1_audit_json_shape_no_fabricated(self, target: tuple[str, Path, bool]):
         name, path, _ = target
         proc = _cli("audit", str(path), "--format", "json")
         assert proc.returncode == 0, f"{name}: {proc.stderr}"
         data = json.loads(proc.stdout)
-        for key in ("meta", "inventory", "findings", "dependency_graph"):
+        for key in ("meta", "inventory", "findings", "dependency_graph", "documentation"):
             assert key in data, f"{name} missing {key}"
 
         def _walk_keys(obj) -> set[str]:

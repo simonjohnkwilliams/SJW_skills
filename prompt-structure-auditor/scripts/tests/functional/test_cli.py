@@ -55,15 +55,13 @@ def test_cli_audit_quiet_health_view():
         env=_env(),
     )
     assert proc.returncode == 0, proc.stderr
-    assert "Repository" in proc.stdout
-    assert "Prompt Sources" in proc.stdout
-    assert "Status" in proc.stdout
+    assert "Summary" in proc.stdout
     assert "Findings" in proc.stdout
-    assert "Honesty note" in proc.stdout
-    assert "psa doctor" in proc.stdout
-    # Quiet: no full inventory dump / per-ignore listing
+    assert "| Field | Result |" in proc.stdout
+    assert "| Severity | Rule | Issue | Evidence |" in proc.stdout
+    assert "Honesty note" not in proc.stdout
+    assert "psa doctor" not in proc.stdout
     assert "Prompt Surface Inventory" not in proc.stdout
-    assert "Ignored (default exclusion)" not in proc.stdout
 
 
 def test_cli_audit_json_contains_findings_key():

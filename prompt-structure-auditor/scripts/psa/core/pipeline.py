@@ -34,6 +34,7 @@ class Audit:
     findings: tuple[Finding, ...]
     inventory: PromptSurfaceInventory
     dependency_graph: DependencyGraph
+    documentation: tuple[str, ...] = ()
 
     def to_dict(self) -> dict:
         return {
@@ -41,6 +42,7 @@ class Audit:
             "inventory": self.inventory.to_dict(),
             "findings": [f.to_dict() for f in self.findings],
             "dependency_graph": self.dependency_graph.to_dict(),
+            "documentation": list(self.documentation),
         }
 
 
@@ -67,4 +69,5 @@ def analyze(
         findings=findings,
         inventory=inventory,
         dependency_graph=graph,
+        documentation=discovered.documentation,
     )

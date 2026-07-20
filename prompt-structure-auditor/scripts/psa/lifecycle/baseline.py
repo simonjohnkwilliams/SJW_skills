@@ -77,6 +77,7 @@ def _audit_from_dict(data: dict) -> Audit:
         findings=findings,
         inventory=PromptSurfaceInventory(rows=inv_rows),
         dependency_graph=graph,
+        documentation=tuple(data.get("documentation", [])),
     )
 
 

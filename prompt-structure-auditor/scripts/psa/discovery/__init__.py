@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from psa.core.config import DEFAULT_CONFIG, ConfigView
 from psa.core.ports import RepoFS
 from psa.core.ignore_globs import IgnoreMatch, collapse_ignored, match_ignore
+from psa.discovery.documentation import collect_documentation
 
 ADAPTER_REASONS: dict[str, str] = {
     "claude": "Claude instruction source",
@@ -38,6 +39,7 @@ class Source:
 class DiscoverResult:
     sources: tuple[Source, ...]
     ignored: tuple[IgnoreMatch, ...]
+    documentation: tuple[str, ...] = ()
 
     def __iter__(self):
         return iter(self.sources)
@@ -127,7 +129,18 @@ def discover(repo: RepoFS, config: ConfigView | None = None) -> DiscoverResult:
 
     sources = tuple(sorted(found, key=lambda s: (s.order_hint, s.path)))
     ignored = collapse_ignored(ignored_raw)
-    return DiscoverResult(sources=sources, ignored=ignored)
+    ignored_file_paths = {m.path for m in ignored_raw}
+    instruction_paths = {s.path for s in sources if s.subtype == "instruction"}
+    documentation = collect_documentation(
+        files,
+        instruction_paths=instruction_paths,
+        ignored_paths=ignored_file_paths,
+    )
+    return DiscoverResult(
+        sources=sources,
+        ignored=ignored,
+        documentation=documentation,
+    )
 
 
 def render_discover(result: DiscoverResult) -> str:

@@ -36,17 +36,20 @@ $env:PYTHONPATH = (Get-Location).Path
 
 ---
 
-### 1) R1 — Audit + Doctor
+### 1) R1 — Audit + Doctor (frozen UX)
 
 ```powershell
 python -m psa audit .\tests\fixtures\vr3_demo
+python -m psa audit .\tests\fixtures\empty_repo
 python -m psa doctor .\tests\fixtures\vr3_demo
 python -m psa audit .\tests\fixtures\vr3_demo --format json
 ```
 
-**Pass if:** `audit` shows Repository / Prompt Sources counts / Status / Findings / Honesty note and a hint to run `psa doctor`; it does **not** dump every ignored path. `doctor` lists instruction sources with reasons and ignored roots with **Pattern matched**. JSON has `findings` and no `score` / `hit_rate` / `cost`.
+**Pass if:** every `audit` has **Summary** then **Findings** with the same field/column names; empty repos show Findings placeholder row and `✅ Healthy`; issue repos show `⚠ Needs Attention` and a severity breakdown; no honesty note / ignore dumps / doctor hints in audit text. `doctor` still lists ignores and documentation paths.
 
-**Regression (install-in-repo):** after copying the skill into `.cursor/skills/`, `audit` / `doctor` on the **app** root must not emit findings from `.cursor/skills/**/scripts/tests/fixtures/**`.
+**Contract tests:** `python -m pytest tests/acceptance/test_audit_contract_r1.py`
+
+**Regression (install-in-repo):** no findings from `.cursor/skills/**/scripts/tests/fixtures/**`.
 
 **Optional live repos:** VR1 empty honesty; VR2 ACT; VR3 ORDER+STYLE+DUP without ORDER on “On Hold”.
 

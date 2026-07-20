@@ -385,9 +385,9 @@ def test_CLI002_audit():
         check=False,
     )
     assert proc.returncode == 0
+    assert "Summary" in proc.stdout
     assert "Findings" in proc.stdout
-    assert "Repository" in proc.stdout
-    assert "Honesty note" in proc.stdout
+    assert "| Field | Result |" in proc.stdout
 
 
 def test_CLI003_format_json():

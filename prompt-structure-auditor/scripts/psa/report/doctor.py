@@ -44,6 +44,15 @@ def render_doctor(result: DiscoverResult, config: ConfigView | None = None) -> s
     else:
         lines.append("  (none)")
 
+    docs = list(result.documentation)
+    lines.extend(["", "Documentation (AI-relevant, not runtime)", f"  Count: {len(docs)}"])
+    if docs:
+        for path in docs:
+            lines.append(f"  [d] {path}")
+            lines.append("      Reason: Documentation surface (architecture only)")
+    else:
+        lines.append("  (none)")
+
     lines.extend(["", "Ignored", f"  Count: {len(result.ignored)}"])
     if result.ignored:
         for m in result.ignored:

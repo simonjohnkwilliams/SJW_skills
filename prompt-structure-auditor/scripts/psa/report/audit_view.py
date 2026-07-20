@@ -1,4 +1,12 @@
-"""User-facing audit report — answers: is prompt architecture healthy?"""
+"""Frozen Release 1 audit report — public UX contract.
+
+Exactly two sections, always, in this order:
+
+1. Summary  (fixed fields table)
+2. Findings (table; placeholder row when empty)
+
+Future releases may append sections *after* Findings only.
+"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -6,10 +14,23 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from psa.core.pipeline import Audit
+    from psa.findings import Finding
 
+# Public contract — do not rename or reorder without a major version bump.
+SUMMARY_HEADING = "Summary"
+FINDINGS_HEADING = "Findings"
+SUMMARY_FIELDS = (
+    "Repository",
+    "Active Prompt Sources",
+    "Documentation",
+    "Configuration",
+    "Status",
+    "Findings",
+)
+FINDINGS_COLUMNS = ("Severity", "Rule", "Issue", "Evidence")
 
 _PRIORITY_ORDER = ("High value", "Medium value", "Low value", "Informational")
-_PRIORITY_LABEL = {
+_SEVERITY = {
     "High value": "High",
     "Medium value": "Medium",
     "Low value": "Low",
@@ -18,72 +39,97 @@ _PRIORITY_LABEL = {
 
 
 def render_audit(audit: Audit, *, repo_name: str | None = None) -> str:
-    """Quiet day-to-day audit output (CLI default text)."""
-    inv = audit.inventory
-    n_instr = sum(1 for r in inv.rows if r.status == "present")
-    n_config = sum(1 for r in inv.rows if r.status == "config")
-    n_ignored = sum(1 for r in inv.rows if r.status == "ignored")
-    n_data = sum(1 for r in inv.rows if r.status == "out_of_scope")
+    """Stable day-to-day audit text (CLI default)."""
+    n_instr = sum(1 for r in audit.inventory.rows if r.status == "present")
+    n_config = sum(1 for r in audit.inventory.rows if r.status == "config")
+    n_docs = len(audit.documentation)
 
     name = repo_name or "repository"
-    lines: list[str] = [
-        "Repository",
-        f"  {name}",
-        "",
-        "Prompt Sources",
-        f"  {n_instr} instruction source{'s' if n_instr != 1 else ''}",
-        f"  {n_config} configuration file{'s' if n_config != 1 else ''}",
-        f"  {n_ignored} ignored path{'s' if n_ignored != 1 else ''}",
-        f"  {n_data} data file{'s' if n_data != 1 else ''} excluded",
-        "",
-        "Status",
-    ]
-
-    if not audit.findings:
-        if n_instr == 0:
-            lines.append("  No prompt instruction surface found")
-            lines.append("  Honest empty result: nothing to structurally audit.")
-        else:
-            lines.append("  Healthy")
-            lines.append("")
-            lines.append("Findings")
-            lines.append("  No prompt architecture issues detected.")
-    else:
-        lines.append("  Issues found")
-        lines.append("")
-        lines.append(f"Findings")
-        lines.append(f"  {len(audit.findings)} finding{'s' if len(audit.findings) != 1 else ''}")
-        lines.append("")
-        by_pri: dict[str, list] = {p: [] for p in _PRIORITY_ORDER}
-        for f in audit.findings:
-            by_pri.setdefault(f.priority, []).append(f)
-        for band in _PRIORITY_ORDER:
-            group = by_pri.get(band) or []
-            if not group:
-                continue
-            lines.append(_PRIORITY_LABEL.get(band, band))
-            for f in group:
-                lines.append(f"  [{f.rule_id}] {f.title}")
-                lines.append(
-                    f"    {f.priority} · {f.verification} · owner: {f.ownership}"
-                )
-                if f.evidence:
-                    e0 = f.evidence[0]
-                    span = f"{e0.span[0]}-{e0.span[1]}" if e0.span else "?"
-                    lines.append(f"    Evidence: {e0.path}:{span}")
-                lines.append(f"    Recommendation: {f.recommendation}")
-                lines.append("")
-
-    lines.append("Honesty note")
-    lines.append(
-        "  This audit reports structure observable from repository contents. "
-        "It does not measure or predict cache hit rate, cost, or latency."
+    status = (
+        "✅ Healthy"
+        if not audit.findings
+        else "⚠ Needs Attention"
     )
-    lines.append("")
-    lines.append("Run `psa doctor` for discovery details.")
+    findings_cell = _findings_summary_cell(audit.findings)
+
+    instr_label = (
+        f"{n_instr} instruction file"
+        if n_instr == 1
+        else f"{n_instr} instruction files"
+    )
+    doc_label = f"{n_docs} file" if n_docs == 1 else f"{n_docs} files"
+    config_label = f"{n_config} file" if n_config == 1 else f"{n_config} files"
+
+    summary_values = {
+        "Repository": name,
+        "Active Prompt Sources": instr_label,
+        "Documentation": doc_label,
+        "Configuration": config_label,
+        "Status": status,
+        "Findings": findings_cell,
+    }
+
+    lines: list[str] = [SUMMARY_HEADING, "", "| Field | Result |", "| --- | --- |"]
+    for field in SUMMARY_FIELDS:
+        lines.append(f"| {field} | {summary_values[field]} |")
+
+    lines.extend(["", FINDINGS_HEADING, "", _findings_header_row(), "| --- | --- | --- | --- |"])
+    if not audit.findings:
+        lines.append("| — | — | No prompt architecture issues detected | — |")
+    else:
+        for f in _sorted_findings(audit.findings):
+            sev = _SEVERITY.get(f.priority, f.priority)
+            issue = _short_issue(f)
+            evidence = _evidence_path(f)
+            lines.append(f"| {sev} | {f.rule_id} | {issue} | {evidence} |")
+
     lines.append("")
     return "\n".join(lines)
 
 
 def repo_display_name(root: str | Path) -> str:
     return Path(root).resolve().name
+
+
+def _findings_summary_cell(findings: tuple) -> str:
+    if not findings:
+        return "None"
+    counts: dict[str, int] = {}
+    for f in findings:
+        label = _SEVERITY.get(f.priority, f.priority)
+        counts[label] = counts.get(label, 0) + 1
+    parts = []
+    for band in ("High", "Medium", "Low", "Informational"):
+        if band in counts:
+            parts.append(f"{counts[band]} {band}")
+    detail = ", ".join(parts) if parts else ""
+    total = len(findings)
+    return f"{total} ({detail})" if detail else str(total)
+
+
+def _sorted_findings(findings: tuple) -> list:
+    rank = {p: i for i, p in enumerate(_PRIORITY_ORDER)}
+
+    def key(f: Finding) -> tuple:
+        return (rank.get(f.priority, 99), f.rule_id, f.title, f.id)
+
+    return sorted(findings, key=key)
+
+
+def _findings_header_row() -> str:
+    return "| " + " | ".join(FINDINGS_COLUMNS) + " |"
+
+
+def _short_issue(f: Finding) -> str:
+    title = f.title.strip()
+    # Prefer a concise issue cell; keep deterministic truncation.
+    if len(title) > 72:
+        return title[:69].rstrip() + "..."
+    return title.replace("|", "/")
+
+
+def _evidence_path(f: Finding) -> str:
+    if not f.evidence:
+        return "—"
+    path = f.evidence[0].path.replace("\\", "/")
+    return path.replace("|", "/")
