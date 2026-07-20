@@ -40,11 +40,15 @@ $env:PYTHONPATH = (Get-Location).Path
 
 ```powershell
 python -m psa inventory .\tests\fixtures\vr3_demo
+python -m psa discover .
+python -m psa inventory .
 python -m psa audit .\tests\fixtures\vr3_demo
 python -m psa audit .\tests\fixtures\vr3_demo --format json
 ```
 
-**Pass if:** inventory lists AGENTS.md; text audit has findings + honesty note; JSON has `findings` and no `score` / `hit_rate` / `cost`.
+**Pass if:** inventory lists AGENTS.md with a **Reason**; ignored skill/test trees show under Ignored when auditing a repo that contains the installed skill; JSON has `findings` and no `score` / `hit_rate` / `cost`.
+
+**Regression (install-in-repo):** after copying the skill into `.cursor/skills/`, `discover` / `audit` on the **app** root must not emit findings from `.cursor/skills/**/scripts/tests/fixtures/**`.
 
 **Optional live repos:** VR1 empty honesty; VR2 ACT; VR3 ORDER+STYLE+DUP without ORDER on “On Hold”.
 

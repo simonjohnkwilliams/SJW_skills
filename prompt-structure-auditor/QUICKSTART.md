@@ -70,12 +70,19 @@ or
 
 ## Release 1 — Audit (read-only)
 
+Discovery **ignores test/fixture trees by default** (including an installed skill’s
+`scripts/tests/fixtures`), so auditing a real app does not report the skill’s own samples.
+Override with `--no-default-ignores` when you intentionally want those paths.
+
 ### CLI
 
 ```powershell
+python -m psa discover .
 python -m psa inventory .
 python -m psa audit .
 python -m psa audit . --format json
+# Include tests/fixtures (opt-in):
+python -m psa discover . --no-default-ignores
 ```
 
 ### Expected output (inventory)
@@ -84,12 +91,20 @@ python -m psa audit . --format json
 Prompt Surface Inventory
 
 Discovered (instruction)
-  [x] AGENTS.md  1 file(s)          # or Cursor Rules / CLAUDE.md
+  [x] AGENTS.md  instruction
+      Reason: Agent instructions
+
+Ignored (default exclusion)
+  [!] tests  (tests/**)
+      Reason: Ignored (default exclusion)
 
 Not found
   [ ] Claude instructions
+      Reason: Not found in repository
   ...
 ```
+
+Use `python -m psa discover .` for a Discovery Summary (counts, reasons, ignore patterns).
 
 Empty repos also list absences and may show config/data as out of scope — **no fabricated findings**.
 

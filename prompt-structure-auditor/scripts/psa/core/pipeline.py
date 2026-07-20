@@ -51,11 +51,12 @@ def analyze(
 ) -> Audit:
     cfg = config or DEFAULT_CONFIG
     version = tool_version or __version__
-    sources = discover(repo)
+    discovered = discover(repo, cfg)
+    sources = discovered.sources
     model = build_model(sources)
     raw = run_rules(model, cfg)
     findings = normalize_findings(raw)
-    inventory = build_inventory(sources)
+    inventory = build_inventory(sources, ignored=discovered.ignored)
     graph = build_recommendations(findings)
     return Audit(
         meta=RunMeta(

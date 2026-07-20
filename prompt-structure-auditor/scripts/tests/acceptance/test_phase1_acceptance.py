@@ -158,7 +158,9 @@ def test_D003_claude_discovery():
     assert len(claude) == 1
     assert claude[0].default_ownership == "user"
     inv = analyze(LocalRepoFS(FIXTURES / "with_claude"), tool_version="0.1.0").inventory
-    assert any(r.label == "Claude instructions" and r.status == "present" for r in inv.rows)
+    assert any(
+        r.status == "present" and r.label.endswith("CLAUDE.md") for r in inv.rows
+    )
 
 
 def test_D004_cursor_rules_discovery():

@@ -3,13 +3,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from psa.core.ignore_globs import IgnoreMatch
+
 
 @dataclass(frozen=True)
 class InventoryRow:
     adapter: str
     label: str
-    status: str  # present | absent | out_of_scope | config
+    status: str  # present | absent | out_of_scope | config | ignored
     detail: str = ""
+    reason: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -17,6 +20,7 @@ class InventoryRow:
             "label": self.label,
             "status": self.status,
             "detail": self.detail,
+            "reason": self.reason,
         }
 
 
@@ -28,62 +32,96 @@ class PromptSurfaceInventory:
         return {"rows": [r.to_dict() for r in self.rows]}
 
 
-def build_inventory(sources, *, known_absent_checks: bool = True) -> PromptSurfaceInventory:
-    from psa.discovery import Source
-
+def build_inventory(
+    sources,
+    ignored: tuple[IgnoreMatch, ...] = (),
+    *,
+    known_absent_checks: bool = True,
+) -> PromptSurfaceInventory:
     sources = tuple(sources)
-    paths = {s.path.replace("\\", "/") for s in sources}
-    adapters_present = {s.adapter for s in sources}
-
+    ignored = tuple(ignored)
     rows: list[InventoryRow] = []
 
     def has_instruction(adapter: str) -> bool:
         return any(s.adapter == adapter and s.subtype == "instruction" for s in sources)
 
-    checks = [
-        ("claude", "CLAUDE.md", "Claude instructions"),
-        ("agents", "AGENTS.md", "AGENTS.md"),
-        ("cursor_rules", "Cursor rules", "Cursor Rules"),
-        ("copilot", "Copilot instructions", "Copilot Instructions"),
-    ]
-    for adapter, label, title in checks:
-        if has_instruction(adapter):
-            detail_paths = [
-                s.path for s in sources if s.adapter == adapter and s.subtype == "instruction"
-            ]
-            rows.append(
-                InventoryRow(
-                    adapter=adapter,
-                    label=title,
-                    status="present",
-                    detail=f"{len(detail_paths)} file(s)",
-                )
+    # Per-file instruction sources with attribution
+    for s in sources:
+        if s.subtype != "instruction":
+            continue
+        reason = s.inclusion_reason() if hasattr(s, "inclusion_reason") else s.reason
+        rows.append(
+            InventoryRow(
+                adapter=s.adapter,
+                label=s.path,
+                status="present",
+                detail="instruction",
+                reason=reason or "Instruction source",
             )
-        else:
-            rows.append(InventoryRow(adapter=adapter, label=title, status="absent", detail=""))
+        )
+
+    # Absent family checks (only when no files for that adapter)
+    checks = [
+        ("claude", "Claude instructions"),
+        ("agents", "AGENTS.md"),
+        ("cursor_rules", "Cursor Rules"),
+        ("copilot", "Copilot Instructions"),
+    ]
+    if known_absent_checks:
+        for adapter, title in checks:
+            if not has_instruction(adapter):
+                rows.append(
+                    InventoryRow(
+                        adapter=adapter,
+                        label=title,
+                        status="absent",
+                        detail="",
+                        reason="Not found in repository",
+                    )
+                )
 
     for s in sources:
         if s.subtype == "config":
+            reason = s.inclusion_reason() if hasattr(s, "inclusion_reason") else ""
             rows.append(
                 InventoryRow(
                     adapter=s.adapter,
                     label=s.path,
                     status="config",
                     detail="config (not instruction)",
+                    reason=reason or "Tool config",
                 )
             )
         elif s.subtype == "data":
+            reason = s.inclusion_reason() if hasattr(s, "inclusion_reason") else ""
             rows.append(
                 InventoryRow(
                     adapter=s.adapter,
                     label=s.path,
                     status="out_of_scope",
                     detail="data (not audited)",
+                    reason=reason or "Data (not instruction)",
                 )
             )
 
-    # stable order
-    status_rank = {"present": 0, "config": 1, "absent": 2, "out_of_scope": 3}
+    for m in ignored:
+        rows.append(
+            InventoryRow(
+                adapter="ignore",
+                label=m.display_root.rstrip("/"),
+                status="ignored",
+                detail=m.pattern,
+                reason=m.reason,
+            )
+        )
+
+    status_rank = {
+        "present": 0,
+        "config": 1,
+        "ignored": 2,
+        "absent": 3,
+        "out_of_scope": 4,
+    }
     rows.sort(key=lambda r: (status_rank.get(r.status, 9), r.adapter, r.label))
     return PromptSurfaceInventory(rows=tuple(rows))
 
@@ -93,6 +131,7 @@ def render_inventory(inv: PromptSurfaceInventory) -> str:
     groups = {
         "present": "Discovered (instruction)",
         "config": "Discovered (config, not instruction)",
+        "ignored": "Ignored (default exclusion)",
         "absent": "Not found",
         "out_of_scope": "Out of scope (data)",
     }
@@ -101,11 +140,20 @@ def render_inventory(inv: PromptSurfaceInventory) -> str:
         if not group:
             continue
         lines.append(title)
-        # ASCII marks for Windows console compatibility
-        mark = {"present": "[x]", "config": "[c]", "absent": "[ ]", "out_of_scope": "[-]"}[status]
+        mark = {
+            "present": "[x]",
+            "config": "[c]",
+            "ignored": "[!]",
+            "absent": "[ ]",
+            "out_of_scope": "[-]",
+        }[status]
         for r in group:
-            extra = f"  {r.detail}" if r.detail else ""
+            extra = f"  {r.detail}" if r.detail and status != "ignored" else ""
+            if status == "ignored" and r.detail:
+                extra = f"  ({r.detail})"
             lines.append(f"  {mark} {r.label}{extra}")
+            if r.reason:
+                lines.append(f"      Reason: {r.reason}")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
@@ -138,7 +186,6 @@ def render_human(audit) -> str:
     if graph and graph.roadmap:
         lines.append("")
         lines.append("Fix these first (roadmap)")
-        # Headline: first unique rule ids in roadmap order (usability)
         seen_rules: list[str] = []
         headlines: list = []
         for n in graph.roadmap:
@@ -150,8 +197,6 @@ def render_human(audit) -> str:
                 break
         for i, n in enumerate(headlines, 1):
             lines.append(f"  {i}. [{n.rule_id}] {n.action[:140]}")
-        remaining_rules = [n.rule_id for n in graph.roadmap if n.rule_id not in seen_rules[:3]]
-        # count unique remaining rule ids after the headline set
         extra = []
         for rid in [n.rule_id for n in graph.roadmap]:
             if rid not in {h.rule_id for h in headlines} and rid not in extra:

@@ -7,8 +7,10 @@ import sys
 from pathlib import Path
 
 from psa.core.canon import dumps
+from psa.core.config import DEFAULT_CONFIG, ConfigView
 from psa.core.pipeline import analyze
 from psa.core.ports import LocalRepoFS
+from psa.discovery import discover, render_discover
 from psa.lifecycle.baseline import load_baseline, save_baseline
 from psa.lifecycle.diff import diff_audits
 from psa.patch.apply import apply_patch
@@ -17,23 +19,44 @@ from psa.patch.validate import validate_patch
 from psa.report.inventory import render_human, render_inventory
 
 
+def _add_ignore_flag(p: argparse.ArgumentParser) -> None:
+    p.add_argument(
+        "--no-default-ignores",
+        action="store_true",
+        help="Include paths normally excluded (tests/, fixtures/, skill test trees)",
+    )
+
+
+def _config_from_args(args: argparse.Namespace) -> ConfigView:
+    if getattr(args, "no_default_ignores", False):
+        return DEFAULT_CONFIG.with_no_default_ignores()
+    return DEFAULT_CONFIG
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="psa", description="Prompt Structure Auditor")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
+    p_disc = sub.add_parser("discover", help="Show discovery summary (sources + ignores)")
+    p_disc.add_argument("path", nargs="?", default=".", help="Repository path")
+    _add_ignore_flag(p_disc)
+
     p_inv = sub.add_parser("inventory", help="Show prompt surface inventory")
     p_inv.add_argument("path", nargs="?", default=".", help="Repository path")
+    _add_ignore_flag(p_inv)
 
     p_audit = sub.add_parser("audit", help="Run full audit")
     p_audit.add_argument("path", nargs="?", default=".", help="Repository path")
     p_audit.add_argument("--format", choices=("text", "json"), default="text")
     p_audit.add_argument("--out", default=None, help="Write output to file")
+    _add_ignore_flag(p_audit)
 
     p_base = sub.add_parser("baseline", help="Baseline operations")
     base_sub = p_base.add_subparsers(dest="base_cmd", required=True)
     p_save = base_sub.add_parser("save", help="Save baseline audit JSON")
     p_save.add_argument("path", nargs="?", default=".", help="Repository path")
     p_save.add_argument("--out", required=True, help="Baseline output path")
+    _add_ignore_flag(p_save)
 
     p_diff = sub.add_parser("diff", help="Diff current audit against a baseline")
     p_diff.add_argument("path", nargs="?", default=".", help="Repository path")
@@ -44,6 +67,7 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Exit 1 if any findings were introduced (CI ratchet)",
     )
+    _add_ignore_flag(p_diff)
 
     p_patch = sub.add_parser("patch", help="Patch preview / validate / apply")
     patch_sub = p_patch.add_subparsers(dest="patch_cmd", required=True)
@@ -54,6 +78,7 @@ def main(argv: list[str] | None = None) -> int:
             help="Finding id (f_…) or rule id (e.g. ORDER001)",
         )
         p.add_argument("path", nargs="?", default=".", help="Repository path")
+        _add_ignore_flag(p)
 
     p_prev = patch_sub.add_parser("preview", help="Preview mechanical patch (no writes)")
     _add_finding_path(p_prev)
@@ -72,13 +97,14 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     args = parser.parse_args(argv)
+    cfg = _config_from_args(args)
 
     if args.cmd == "baseline" and args.base_cmd == "save":
         root = Path(args.path).resolve()
         if not root.exists():
             print(f"path not found: {root}", file=sys.stderr)
             return 2
-        audit = analyze(LocalRepoFS(root))
+        audit = analyze(LocalRepoFS(root), config=cfg)
         save_baseline(audit, args.out)
         print(f"baseline saved: {args.out}")
         return 0
@@ -89,7 +115,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"path not found: {root}", file=sys.stderr)
             return 2
         fs = LocalRepoFS(root)
-        audit = analyze(fs)
+        audit = analyze(fs, config=cfg)
         try:
             patch = preview_patch(fs, audit, args.finding_id)
         except ValueError as exc:
@@ -145,7 +171,6 @@ def main(argv: list[str] | None = None) -> int:
             except (ValueError, OSError, subprocess.CalledProcessError) as exc:
                 print(f"apply failed: {exc}", file=sys.stderr)
                 return 1
-
             print("Patch Applied")
             print(f"  Branch:  {applied.branch}")
             print(f"  Commit:  {applied.commit}")
@@ -162,7 +187,12 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     fs = LocalRepoFS(root)
-    audit = analyze(fs)
+
+    if args.cmd == "discover":
+        print(render_discover(discover(fs, cfg)), end="")
+        return 0
+
+    audit = analyze(fs, config=cfg)
 
     if args.cmd == "inventory":
         print(render_inventory(audit.inventory), end="")

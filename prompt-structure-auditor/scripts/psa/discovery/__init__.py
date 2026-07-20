@@ -3,7 +3,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from psa.core.config import DEFAULT_CONFIG, ConfigView
 from psa.core.ports import RepoFS
+from psa.core.ignore_globs import IgnoreMatch, collapse_ignored, match_ignore
+
+ADAPTER_REASONS: dict[str, str] = {
+    "claude": "Claude instruction source",
+    "agents": "Agent instructions",
+    "cursor_rules": "Cursor rule",
+    "copilot": "Copilot instructions",
+    "serena": "Tool config (Serena)",
+    "opencode": "Tool config (OpenCode)",
+    "claude_settings": "Tool config (Claude settings)",
+    "research_data": "Data (not instruction)",
+}
 
 
 @dataclass(frozen=True)
@@ -15,6 +28,22 @@ class Source:
     text: str
     default_ownership: str
     order_hint: int
+    reason: str = ""
+
+    def inclusion_reason(self) -> str:
+        return self.reason or ADAPTER_REASONS.get(self.adapter, f"Discovered ({self.adapter})")
+
+
+@dataclass(frozen=True)
+class DiscoverResult:
+    sources: tuple[Source, ...]
+    ignored: tuple[IgnoreMatch, ...]
+
+    def __iter__(self):
+        return iter(self.sources)
+
+    def __len__(self) -> int:
+        return len(self.sources)
 
 
 def _norm(path: str) -> str:
@@ -24,9 +53,12 @@ def _norm(path: str) -> str:
     return p
 
 
-def discover(repo: RepoFS) -> tuple[Source, ...]:
+def discover(repo: RepoFS, config: ConfigView | None = None) -> DiscoverResult:
+    cfg = config or DEFAULT_CONFIG
+    patterns = cfg.effective_ignore_globs()
     files = [_norm(p) for p in repo.list_files()]
     found: list[Source] = []
+    ignored_raw: list[IgnoreMatch] = []
     order = 0
 
     def add(adapter: str, subtype: str, path: str, ownership: str, text: str = "") -> None:
@@ -40,12 +72,17 @@ def discover(repo: RepoFS) -> tuple[Source, ...]:
                 text=text,
                 default_ownership=ownership,
                 order_hint=order,
+                reason=ADAPTER_REASONS.get(adapter, f"Discovered ({adapter})"),
             )
         )
         order += 1
 
     for path in files:
-        lower = path.lower()
+        hit = match_ignore(path, patterns) if patterns else None
+        if hit is not None:
+            ignored_raw.append(hit)
+            continue
+
         name = path.rsplit("/", 1)[-1]
 
         if name.upper() in {"CLAUDE.MD", "CLAUDE.LOCAL.MD"} or name == "CLAUDE.md":
@@ -61,14 +98,12 @@ def discover(repo: RepoFS) -> tuple[Source, ...]:
             if path.endswith((".mdc", ".md")):
                 add("cursor_rules", "instruction", path, "user", repo.read_text(path))
                 continue
-            # nested junk under rules → config
             add("cursor_rules", "config", path, "unknown", "")
             continue
         if path.endswith("copilot-instructions.md"):
             add("copilot", "instruction", path, "user", repo.read_text(path))
             continue
         if path.startswith(".serena/") or "/.serena/" in path:
-            # only project yml files as config markers
             if path.endswith((".yml", ".yaml")):
                 add("serena", "config", path, "tool", "")
             continue
@@ -77,13 +112,11 @@ def discover(repo: RepoFS) -> tuple[Source, ...]:
                 add("opencode", "config", path, "tool", "")
             continue
         if path.startswith(".claude/skills/") or "/.claude/skills/" in path:
-            # Tool-owned skill trees — do not enumerate every asset as a source.
             continue
         if path.startswith(".claude/") and path.endswith(".json"):
             add("claude_settings", "config", path, "tool", "")
             continue
         if path.startswith(".agents/") or "/.agents/" in path:
-            # Installed skills — ownership tool; skip bulk enumeration in v0.1
             continue
         if "/research/" in f"/{path}" and path.endswith((".json", ".log")):
             add("research_data", "data", path, "unknown", "")
@@ -92,4 +125,46 @@ def discover(repo: RepoFS) -> tuple[Source, ...]:
             add("research_data", "data", path, "unknown", "")
             continue
 
-    return tuple(sorted(found, key=lambda s: (s.order_hint, s.path)))
+    sources = tuple(sorted(found, key=lambda s: (s.order_hint, s.path)))
+    ignored = collapse_ignored(ignored_raw)
+    return DiscoverResult(sources=sources, ignored=ignored)
+
+
+def render_discover(result: DiscoverResult) -> str:
+    """Human Discovery Summary for `psa discover`."""
+    instructions = [s for s in result.sources if s.subtype == "instruction"]
+    configs = [s for s in result.sources if s.subtype == "config"]
+    data = [s for s in result.sources if s.subtype == "data"]
+
+    lines = [
+        "Discovery Summary",
+        "",
+        f"Instruction sources: {len(instructions)}",
+    ]
+    for s in instructions:
+        lines.append(f"  [x] {s.path}")
+        lines.append(f"      Reason: {s.inclusion_reason()}")
+    lines.append("")
+    lines.append(f"Config sources: {len(configs)}")
+    for s in configs:
+        lines.append(f"  [c] {s.path}")
+        lines.append(f"      Reason: {s.inclusion_reason()}")
+    if data:
+        lines.append("")
+        lines.append(f"Data sources (out of scope): {len(data)}")
+        for s in data:
+            lines.append(f"  [-] {s.path}")
+            lines.append(f"      Reason: {s.inclusion_reason()}")
+    lines.append("")
+    lines.append(f"Ignored: {len(result.ignored)}")
+    if result.ignored:
+        for m in result.ignored:
+            lines.append(f"  [!] {m.display_root}")
+            lines.append(f"      Reason: {m.reason}")
+            lines.append(f"      Pattern: {m.pattern}")
+        lines.append("")
+        lines.append("Override: pass --no-default-ignores to include ignored paths.")
+    else:
+        lines.append("  (none)")
+    lines.append("")
+    return "\n".join(lines)

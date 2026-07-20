@@ -49,6 +49,15 @@ When the user invokes the skill without a subcommand:
 4. **Do not apply** unless the user explicitly asks. Then re-validate and run
    `python -m psa patch apply ORDER001 <path> --yes`.
 
+### `/prompt-structure-auditor discover`
+
+```powershell
+python -m psa discover <PATH>
+```
+
+Shows instruction/config counts, per-path inclusion reasons, and default ignores.
+Pass `--no-default-ignores` on discover/inventory/audit to include tests/fixtures.
+
 ### `/prompt-structure-auditor inventory`
 
 ```powershell

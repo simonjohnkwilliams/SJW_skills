@@ -18,6 +18,20 @@ def _env() -> dict[str, str]:
     return env
 
 
+def test_cli_discover_exit_zero():
+    proc = subprocess.run(
+        [sys.executable, "-m", "psa", "discover", str(VR3)],
+        cwd=str(SCRIPTS),
+        capture_output=True,
+        text=True,
+        check=False,
+        env=_env(),
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "Discovery Summary" in proc.stdout
+    assert "Reason:" in proc.stdout
+
+
 def test_cli_inventory_exit_zero():
     proc = subprocess.run(
         [sys.executable, "-m", "psa", "inventory", str(VR3)],

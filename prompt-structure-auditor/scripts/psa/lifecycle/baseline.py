@@ -30,6 +30,7 @@ def _audit_from_dict(data: dict) -> Audit:
             label=r["label"],
             status=r["status"],
             detail=r.get("detail", ""),
+            reason=r.get("reason", ""),
         )
         for r in data.get("inventory", {}).get("rows", [])
     )
