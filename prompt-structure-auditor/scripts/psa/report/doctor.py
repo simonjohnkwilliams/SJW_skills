@@ -49,7 +49,7 @@ def render_doctor(result: DiscoverResult, config: ConfigView | None = None) -> s
     if docs:
         for path in docs:
             lines.append(f"  [d] {path}")
-            lines.append("      Reason: Documentation surface (architecture only)")
+            lines.append("      Reason: AI-relevant documentation (prompt / assistant guidance)")
     else:
         lines.append("  (none)")
 

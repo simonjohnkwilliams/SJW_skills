@@ -44,7 +44,7 @@ There is **no** public `inventory` or `discover` command.
 
 ### Default (`/prompt-structure-auditor`)
 
-1. Run **`python -m psa audit <PATH>`** (text). Present the frozen **Summary** and **Findings** tables as produced (do not invent extra sections).
+1. Run **`python -m psa audit <PATH>`** (text). Present the frozen **Prompt Structure Auditor** title plus **Summary** and **Findings** tables as produced (do not invent extra sections).
 2. If the user questions discovery (missing files, unexpected ignores), run **`psa doctor`**.
 3. If `ORDER001` exists and they want a change path: preview → validate.
 4. **Do not apply** unless explicitly asked (`--yes`).

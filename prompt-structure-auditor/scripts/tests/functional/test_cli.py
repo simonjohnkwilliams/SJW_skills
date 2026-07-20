@@ -12,8 +12,9 @@ SCRIPTS = Path(__file__).resolve().parents[2]
 
 
 def _env() -> dict[str, str]:
+    """CLI env without forcing UTF-8 — audit output must be Windows-console safe."""
     env = dict(os.environ)
-    env["PYTHONIOENCODING"] = "utf-8"
+    env.pop("PYTHONIOENCODING", None)
     env["PYTHONPATH"] = str(SCRIPTS) + os.pathsep + env.get("PYTHONPATH", "")
     return env
 
@@ -55,13 +56,18 @@ def test_cli_audit_quiet_health_view():
         env=_env(),
     )
     assert proc.returncode == 0, proc.stderr
+    assert "Prompt Structure Auditor" in proc.stdout
     assert "Summary" in proc.stdout
     assert "Findings" in proc.stdout
     assert "| Field | Result |" in proc.stdout
-    assert "| Severity | Rule | Issue | Evidence |" in proc.stdout
+    assert "| Severity | Rule | Issue |" in proc.stdout
+    assert "Needs Attention" in proc.stdout
+    assert "✅" not in proc.stdout
+    assert "⚠" not in proc.stdout
     assert "Honesty note" not in proc.stdout
     assert "psa doctor" not in proc.stdout
     assert "Prompt Surface Inventory" not in proc.stdout
+    assert proc.stdout.encode("ascii")
 
 
 def test_cli_audit_json_contains_findings_key():

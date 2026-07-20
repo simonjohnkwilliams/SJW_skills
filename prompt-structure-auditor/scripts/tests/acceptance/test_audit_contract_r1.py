@@ -5,9 +5,13 @@ import re
 
 from psa.core.pipeline import analyze
 from psa.core.ports import LocalRepoFS, MemoryRepoFS
+from psa.discovery.documentation import is_documentation_path
 from psa.report.audit_view import (
     FINDINGS_COLUMNS,
     FINDINGS_HEADING,
+    REPORT_TITLE,
+    STATUS_HEALTHY,
+    STATUS_NEEDS_ATTENTION,
     SUMMARY_FIELDS,
     SUMMARY_HEADING,
     render_audit,
@@ -23,13 +27,17 @@ _FORBIDDEN_IN_AUDIT = (
     "Parser Failures",
     "Discovery Summary",
     "Prompt Surface Inventory",
+    "Fix these first",
+    "Implementation Roadmap",
+    "✅",
+    "⚠",
 )
 
 
 def _section_order(text: str) -> list[str]:
     headings = []
     for line in text.splitlines():
-        if line in (SUMMARY_HEADING, FINDINGS_HEADING):
+        if line in (REPORT_TITLE, SUMMARY_HEADING, FINDINGS_HEADING):
             headings.append(line)
     return headings
 
@@ -37,8 +45,8 @@ def _section_order(text: str) -> list[str]:
 def test_contract_identical_structure_healthy_and_issues():
     healthy = render_audit(analyze(LocalRepoFS(VR1), tool_version="0.1.0"), repo_name="vr1")
     issues = render_audit(analyze(LocalRepoFS(VR3), tool_version="0.1.0"), repo_name="vr3")
-    assert _section_order(healthy) == [SUMMARY_HEADING, FINDINGS_HEADING]
-    assert _section_order(issues) == [SUMMARY_HEADING, FINDINGS_HEADING]
+    assert _section_order(healthy) == [REPORT_TITLE, SUMMARY_HEADING, FINDINGS_HEADING]
+    assert _section_order(issues) == [REPORT_TITLE, SUMMARY_HEADING, FINDINGS_HEADING]
     for text in (healthy, issues):
         for field in SUMMARY_FIELDS:
             assert f"| {field} |" in text
@@ -47,16 +55,23 @@ def test_contract_identical_structure_healthy_and_issues():
             assert bad not in text
 
 
+def test_contract_ascii_safe_output():
+    for root, name in ((VR1, "vr1"), (VR3, "vr3")):
+        text = render_audit(analyze(LocalRepoFS(root), tool_version="0.1.0"), repo_name=name)
+        assert text.encode("ascii")
+
+
 def test_contract_empty_findings_placeholder_row():
     text = render_audit(analyze(LocalRepoFS(VR1), tool_version="0.1.0"), repo_name="vr1")
     assert "| Findings | None |" in text
-    assert "✅ Healthy" in text
+    assert f"| Status | {STATUS_HEALTHY} |" in text
     assert "No prompt architecture issues detected" in text
+    assert "| - | - | No prompt architecture issues detected |" in text
 
 
 def test_contract_issues_status_and_breakdown():
     text = render_audit(analyze(LocalRepoFS(VR2), tool_version="0.1.0"), repo_name="lateTrainQueries")
-    assert "⚠ Needs Attention" in text
+    assert f"| Status | {STATUS_NEEDS_ATTENTION} |" in text
     assert re.search(r"\| Findings \| \d+ \(", text)
     assert "| High | ACT" in text or "| High | ACT001 |" in text
 
@@ -77,6 +92,37 @@ def test_contract_documentation_counted():
     assert "2 files" in text or re.search(r"\| Documentation \| \d+ files? \|", text)
 
 
+def test_contract_docs_excludes_general_markdown():
+    assert not is_documentation_path("docs/api.md", instruction_paths=set())
+    assert not is_documentation_path("docs/CHANGELOG.md", instruction_paths=set())
+    assert not is_documentation_path("README.md", instruction_paths=set())
+    assert not is_documentation_path("docs/release-notes.md", instruction_paths=set())
+    assert not is_documentation_path(
+        ".cursor/skills/prompt-structure-auditor/SKILL.md", instruction_paths=set()
+    )
+    assert not is_documentation_path(
+        ".claude/skills/bmad-agent-dev/SKILL.md", instruction_paths=set()
+    )
+    assert is_documentation_path("docs/prompt-engineering.md", instruction_paths=set())
+    assert is_documentation_path("docs/AI-GUIDANCE.md", instruction_paths=set())
+    assert is_documentation_path("docs/ai-workflow.md", instruction_paths=set())
+    assert is_documentation_path("benchmark/prompt.md", instruction_paths=set())
+
+    fs = MemoryRepoFS(
+        {
+            "AGENTS.md": "# A\n",
+            "docs/api.md": "# API\n",
+            "CHANGELOG.md": "# Changes\n",
+            "docs/prompt-engineering.md": "# Prompts\n",
+            ".cursor/skills/foo/SKILL.md": "# skill\n",
+        }
+    )
+    audit = analyze(fs, tool_version="0.1.0")
+    assert audit.documentation == ("docs/prompt-engineering.md",)
+    text = render_audit(audit, repo_name="demo")
+    assert "| Documentation | 1 file |" in text
+
+
 def test_contract_docs_not_promoted_to_findings():
     fs = MemoryRepoFS(
         {
@@ -87,4 +133,4 @@ def test_contract_docs_not_promoted_to_findings():
     assert audit.documentation
     assert audit.findings == ()
     text = render_audit(audit, repo_name="docs-only")
-    assert "✅ Healthy" in text
+    assert f"| Status | {STATUS_HEALTHY} |" in text

@@ -20,12 +20,13 @@ CLI package: **`psa`** (under `prompt-structure-auditor/scripts/`)
 
 ## Release 1 audit UX contract (frozen)
 
-`psa audit` text output is a **stable public interface**. Every repo gets the same structure:
+`psa audit` text output is the **stable public interface**. Every repository gets the same structure:
 
-1. **Summary** (table — fixed fields, fixed order)
-2. **Findings** (table — always present; placeholder row when empty)
+1. **Prompt Structure Auditor** (title)
+2. **Summary** (table — fixed fields, fixed order)
+3. **Findings** (table — always present; placeholder row when empty)
 
-Future releases may **append** sections after Findings only. They must not reorder, rename, or reshape these two sections.
+Future releases may **append** sections after Findings only. They must not reorder, rename, or reshape Summary or Findings.
 
 ### Summary fields (fixed)
 
@@ -33,16 +34,22 @@ Future releases may **append** sections after Findings only. They must not reord
 |-------|-------------|
 | Repository | Repository name |
 | Active Prompt Sources | Instruction files discovered |
-| Documentation | AI-relevant docs (architecture only; not runtime) |
+| Documentation | AI-relevant guidance only (not all Markdown) |
 | Configuration | Prompt-related config files |
-| Status | `✅ Healthy` or `⚠ Needs Attention` |
+| Status | `Healthy` or `Needs Attention` |
 | Findings | `None` or `N (x High, y Medium, …)` |
 
 ### Findings columns (fixed)
 
-`Severity | Rule | Issue | Evidence`
+`Severity | Rule | Issue`
+
+Empty repositories render one placeholder row:
+
+`| - | - | No prompt architecture issues detected |`
 
 Diagnostics (ignores, patterns, parsers) belong in **`psa doctor` only**.
+
+Output is ASCII-safe for standard Windows terminals (no emoji, no UTF-8 requirement).
 
 ---
 
@@ -50,12 +57,12 @@ Diagnostics (ignores, patterns, parsers) belong in **`psa doctor` only**.
 
 | Release | Outcome | Status |
 |---------|---------|--------|
-| **R1 – Audit** | Health report (frozen UX) | **Ready / sign-off** |
-| **R2 – Prioritise** | Remediation plan | Next (`recommend`) |
-| **R3 – Preview** | Exact change | Ready (`ORDER001`) |
-| **R4 – Validate** | Safe change | Ready |
-| **R5 – Apply** | Apply on branch | Ready |
-| **R6 – Continuous** | Baseline / diff / CI | Ready |
+| **R1 – Audit** | Health report (frozen UX) | **Complete** — fixtures + live |
+| **R2 – Prioritise** | Remediation plan | Covered in suite (`recommend` / matrix) |
+| **R3 – Preview** | Exact change | Covered in suite (`ORDER001`) |
+| **R4 – Validate** | Safe change | Covered in suite |
+| **R5 – Apply** | Apply on branch | Covered in suite (temp copy; live refuse-only) |
+| **R6 – Continuous** | Baseline / diff / CI | Covered in suite |
 
 ---
 
@@ -75,7 +82,7 @@ python -m pytest
 /prompt-structure-auditor
 ```
 
-1. Run **`psa audit`** — present the Summary + Findings tables as-is  
+1. Run **`psa audit`** — present the title, Summary, and Findings tables as-is  
 2. If discovery looks wrong → **`psa doctor`**  
 3. Preview/validate/apply only when asked  
 
@@ -99,6 +106,8 @@ python -m psa audit . --format json
 ### Example audit (healthy)
 
 ```
+Prompt Structure Auditor
+
 Summary
 
 | Field | Result |
@@ -107,14 +116,14 @@ Summary
 | Active Prompt Sources | 1 instruction file |
 | Documentation | 0 files |
 | Configuration | 2 files |
-| Status | ✅ Healthy |
+| Status | Healthy |
 | Findings | None |
 
 Findings
 
-| Severity | Rule | Issue | Evidence |
-| --- | --- | --- | --- |
-| — | — | No prompt architecture issues detected | — |
+| Severity | Rule | Issue |
+| --- | --- | --- |
+| - | - | No prompt architecture issues detected |
 ```
 
 ---

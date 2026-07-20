@@ -4,13 +4,13 @@
 
 Automated: `cd scripts; $env:PYTHONPATH=(Get-Location).Path; python -m pytest`
 
-**Release automation (R1–R4):**
+**Release automation (R1–R6, fixtures + live IdeaProjects):**
 
 ```powershell
-python -m pytest tests/acceptance/test_releases_r1_r4.py -v -s
+python -m pytest tests/acceptance/test_releases_r1_r6.py -v -s
 ```
 
-Runs fixtures always; live VR1/VR2/VR3 when those paths exist on the machine.
+Runs fixtures always; live VR1/VR2/VR3 when those paths exist. Every release stage asserts the frozen audit format stays identical across repos.
 
 User guide: [QUICKSTART.md](QUICKSTART.md)
 
@@ -45,13 +45,13 @@ python -m psa doctor .\tests\fixtures\vr3_demo
 python -m psa audit .\tests\fixtures\vr3_demo --format json
 ```
 
-**Pass if:** every `audit` has **Summary** then **Findings** with the same field/column names; empty repos show Findings placeholder row and `✅ Healthy`; issue repos show `⚠ Needs Attention` and a severity breakdown; no honesty note / ignore dumps / doctor hints in audit text. `doctor` still lists ignores and documentation paths.
+**Pass if:** every `audit` starts with **Prompt Structure Auditor**, then **Summary**, then **Findings**, with the same field/column names; empty repos show Findings placeholder row and `Healthy`; issue repos show `Needs Attention` and a severity breakdown; no honesty note / ignore dumps / doctor hints / release or pipeline chatter in audit text; output is ASCII (no emoji). `doctor` still lists ignores and AI-relevant documentation paths.
 
 **Contract tests:** `python -m pytest tests/acceptance/test_audit_contract_r1.py`
 
 **Regression (install-in-repo):** no findings from `.cursor/skills/**/scripts/tests/fixtures/**`.
 
-**Optional live repos:** VR1 empty honesty; VR2 ACT; VR3 ORDER+STYLE+DUP without ORDER on “On Hold”.
+**Optional live repos (in complete suite when present):** VR1 `ai-context-benchmark` (healthy empty); VR2 `lateTrainQueries` (ACT+DUP); VR3 `financeTracker_SW` (healthy CLAUDE.md). Covered by `test_releases_r1_r6.py` + `test_live_validation_repos.py`.
 
 ---
 
@@ -59,10 +59,10 @@ python -m psa audit .\tests\fixtures\vr3_demo --format json
 
 In the text audit output, confirm:
 
-- **Fix these first (roadmap)** with numbered unique rules  
-- **Dependencies** (e.g. don’t apply ORDER001 until STYLE/DUP where edged)
+- Findings ordered by severity so you can answer “what do I fix first?”
+- JSON audit still exposes `dependency_graph.roadmap` for tooling
 
-**Pass if:** you can answer “what do I fix first?” without scanning the whole finding list.
+**Pass if:** you can prioritise from Findings (and roadmap in JSON) without needing diagnostics in the text report.
 
 ---
 

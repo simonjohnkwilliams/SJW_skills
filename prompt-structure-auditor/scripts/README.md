@@ -16,4 +16,10 @@ python -m psa diff PATH --baseline .psa-baseline.json --fail-on-introduced
 ```
 
 CI: repo workflow `.github/workflows/psa.yml` (pytest + CLI smoke).
+Full release matrix (fixtures + live IdeaProjects when present):
+
+```bash
+pytest tests/acceptance/test_releases_r1_r6.py -v -s
+```
+
 See `../QUICKSTART.md` and `../MANUAL_TEST.md`.

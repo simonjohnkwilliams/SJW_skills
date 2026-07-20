@@ -1,11 +1,13 @@
 """Frozen Release 1 audit report — public UX contract.
 
-Exactly two sections, always, in this order:
+Exactly three headings, always, in this order:
 
-1. Summary  (fixed fields table)
-2. Findings (table; placeholder row when empty)
+1. Prompt Structure Auditor  (report title)
+2. Summary                   (fixed fields table)
+3. Findings                  (table; placeholder row when empty)
 
 Future releases may append sections *after* Findings only.
+They must not rename, reorder, or reshape Summary or Findings.
 """
 from __future__ import annotations
 
@@ -17,6 +19,7 @@ if TYPE_CHECKING:
     from psa.findings import Finding
 
 # Public contract — do not rename or reorder without a major version bump.
+REPORT_TITLE = "Prompt Structure Auditor"
 SUMMARY_HEADING = "Summary"
 FINDINGS_HEADING = "Findings"
 SUMMARY_FIELDS = (
@@ -27,7 +30,11 @@ SUMMARY_FIELDS = (
     "Status",
     "Findings",
 )
-FINDINGS_COLUMNS = ("Severity", "Rule", "Issue", "Evidence")
+FINDINGS_COLUMNS = ("Severity", "Rule", "Issue")
+
+STATUS_HEALTHY = "Healthy"
+STATUS_NEEDS_ATTENTION = "Needs Attention"
+EMPTY_FINDINGS_ISSUE = "No prompt architecture issues detected"
 
 _PRIORITY_ORDER = ("High value", "Medium value", "Low value", "Informational")
 _SEVERITY = {
@@ -39,17 +46,13 @@ _SEVERITY = {
 
 
 def render_audit(audit: Audit, *, repo_name: str | None = None) -> str:
-    """Stable day-to-day audit text (CLI default)."""
+    """Stable day-to-day audit text (CLI default). ASCII-safe for Windows consoles."""
     n_instr = sum(1 for r in audit.inventory.rows if r.status == "present")
     n_config = sum(1 for r in audit.inventory.rows if r.status == "config")
     n_docs = len(audit.documentation)
 
-    name = repo_name or "repository"
-    status = (
-        "✅ Healthy"
-        if not audit.findings
-        else "⚠ Needs Attention"
-    )
+    name = _ascii_cell(repo_name or "repository")
+    status = STATUS_HEALTHY if not audit.findings else STATUS_NEEDS_ATTENTION
     findings_cell = _findings_summary_cell(audit.findings)
 
     instr_label = (
@@ -69,19 +72,33 @@ def render_audit(audit: Audit, *, repo_name: str | None = None) -> str:
         "Findings": findings_cell,
     }
 
-    lines: list[str] = [SUMMARY_HEADING, "", "| Field | Result |", "| --- | --- |"]
+    lines: list[str] = [
+        REPORT_TITLE,
+        "",
+        SUMMARY_HEADING,
+        "",
+        "| Field | Result |",
+        "| --- | --- |",
+    ]
     for field in SUMMARY_FIELDS:
         lines.append(f"| {field} | {summary_values[field]} |")
 
-    lines.extend(["", FINDINGS_HEADING, "", _findings_header_row(), "| --- | --- | --- | --- |"])
+    lines.extend(
+        [
+            "",
+            FINDINGS_HEADING,
+            "",
+            _findings_header_row(),
+            "| --- | --- | --- |",
+        ]
+    )
     if not audit.findings:
-        lines.append("| — | — | No prompt architecture issues detected | — |")
+        lines.append(f"| - | - | {EMPTY_FINDINGS_ISSUE} |")
     else:
         for f in _sorted_findings(audit.findings):
             sev = _SEVERITY.get(f.priority, f.priority)
             issue = _short_issue(f)
-            evidence = _evidence_path(f)
-            lines.append(f"| {sev} | {f.rule_id} | {issue} | {evidence} |")
+            lines.append(f"| {sev} | {f.rule_id} | {issue} |")
 
     lines.append("")
     return "\n".join(lines)
@@ -89,6 +106,11 @@ def render_audit(audit: Audit, *, repo_name: str | None = None) -> str:
 
 def repo_display_name(root: str | Path) -> str:
     return Path(root).resolve().name
+
+
+def _ascii_cell(value: str) -> str:
+    """Keep report printable on default Windows consoles without UTF-8 setup."""
+    return value.encode("ascii", errors="replace").decode("ascii")
 
 
 def _findings_summary_cell(findings: tuple) -> str:
@@ -121,15 +143,7 @@ def _findings_header_row() -> str:
 
 
 def _short_issue(f: Finding) -> str:
-    title = f.title.strip()
-    # Prefer a concise issue cell; keep deterministic truncation.
+    title = f.title.strip().replace("|", "/")
     if len(title) > 72:
-        return title[:69].rstrip() + "..."
-    return title.replace("|", "/")
-
-
-def _evidence_path(f: Finding) -> str:
-    if not f.evidence:
-        return "—"
-    path = f.evidence[0].path.replace("\\", "/")
-    return path.replace("|", "/")
+        title = title[:69].rstrip() + "..."
+    return _ascii_cell(title)

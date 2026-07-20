@@ -28,7 +28,9 @@ class IgnoreMatch:
 
 def match_ignore(path: str, patterns: tuple[str, ...]) -> IgnoreMatch | None:
     """Return the first matching ignore pattern for a normalized repo-relative path."""
-    norm = path.replace("\\", "/").lstrip("./")
+    norm = path.replace("\\", "/")
+    while norm.startswith("./"):
+        norm = norm[2:]
     for pattern in patterns:
         root = _match_root(norm, pattern)
         if root is not None:
@@ -52,7 +54,9 @@ def collapse_ignored(matches: list[IgnoreMatch]) -> tuple[IgnoreMatch, ...]:
 
 
 def _match_root(path: str, pattern: str) -> str | None:
-    pat = pattern.replace("\\", "/").lstrip("./")
+    pat = pattern.replace("\\", "/")
+    while pat.startswith("./"):
+        pat = pat[2:]
     if pat.endswith("/**"):
         pat = pat[:-3]
 

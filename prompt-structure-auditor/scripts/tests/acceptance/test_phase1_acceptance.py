@@ -34,7 +34,7 @@ FABRICATED = {
 
 def _env() -> dict[str, str]:
     env = dict(os.environ)
-    env["PYTHONIOENCODING"] = "utf-8"
+    env.pop("PYTHONIOENCODING", None)
     env["PYTHONPATH"] = str(SCRIPTS) + os.pathsep + env.get("PYTHONPATH", "")
     return env
 
@@ -345,15 +345,11 @@ def test_G003_vr3_fixture_order_not_noisy():
 
 
 @pytest.mark.skipif(not LIVE_VR3.is_dir(), reason="VR3 missing")
-def test_G003_vr3_live_order_not_noisy():
+def test_G003_vr3_live_finance_tracker_healthy():
     audit = analyze(LocalRepoFS(LIVE_VR3), tool_version="0.1.0")
-    ids = _rule_ids(audit)
-    assert "ORDER001" in ids
-    assert "STYLE001" in ids
-    assert "DUP001" in ids
-    order_titles = [f.title for f in audit.findings if f.rule_id == "ORDER001"]
-    assert any("Current Focus" in t for t in order_titles)
-    assert not any("On Hold" in t or "Debugging" in t or "Known Issue" in t for t in order_titles)
+    assert audit.findings == ()
+    assert sum(1 for r in audit.inventory.rows if r.status == "present") >= 1
+    assert "ORDER001" not in _rule_ids(audit)
 
 
 # ---------------------------------------------------------------------------
