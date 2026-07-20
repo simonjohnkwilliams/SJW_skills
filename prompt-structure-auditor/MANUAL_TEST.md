@@ -36,19 +36,17 @@ $env:PYTHONPATH = (Get-Location).Path
 
 ---
 
-### 1) R1 — Audit
+### 1) R1 — Audit + Doctor
 
 ```powershell
-python -m psa inventory .\tests\fixtures\vr3_demo
-python -m psa discover .
-python -m psa inventory .
 python -m psa audit .\tests\fixtures\vr3_demo
+python -m psa doctor .\tests\fixtures\vr3_demo
 python -m psa audit .\tests\fixtures\vr3_demo --format json
 ```
 
-**Pass if:** inventory lists AGENTS.md with a **Reason**; ignored skill/test trees show under Ignored when auditing a repo that contains the installed skill; JSON has `findings` and no `score` / `hit_rate` / `cost`.
+**Pass if:** `audit` shows Repository / Prompt Sources counts / Status / Findings / Honesty note and a hint to run `psa doctor`; it does **not** dump every ignored path. `doctor` lists instruction sources with reasons and ignored roots with **Pattern matched**. JSON has `findings` and no `score` / `hit_rate` / `cost`.
 
-**Regression (install-in-repo):** after copying the skill into `.cursor/skills/`, `discover` / `audit` on the **app** root must not emit findings from `.cursor/skills/**/scripts/tests/fixtures/**`.
+**Regression (install-in-repo):** after copying the skill into `.cursor/skills/`, `audit` / `doctor` on the **app** root must not emit findings from `.cursor/skills/**/scripts/tests/fixtures/**`.
 
 **Optional live repos:** VR1 empty honesty; VR2 ACT; VR3 ORDER+STYLE+DUP without ORDER on “On Hold”.
 
@@ -133,8 +131,9 @@ echo $LASTEXITCODE   # expect 1
 
 ## Skill smoke (Cursor)
 
-1. `/prompt-structure-auditor` → inventory + audit + roadmap; offers preview/validate; **does not apply** unless asked.  
-2. `/prompt-structure-auditor preview ORDER001` → diff only.  
-3. `/prompt-structure-auditor validate ORDER001` → PASS/FAIL summary.  
-4. `/prompt-structure-auditor apply ORDER001` → only with explicit user confirm; agent uses `--yes`.  
-5. `/prompt-structure-auditor baseline` / `diff` → save + compare.  
+1. `/prompt-structure-auditor` → `audit` health view; offer `doctor` if discovery is unclear; **does not apply** unless asked.  
+2. `/prompt-structure-auditor doctor` → discovery diagnostics.  
+3. `/prompt-structure-auditor preview ORDER001` → diff only.  
+4. `/prompt-structure-auditor validate ORDER001` → PASS/FAIL summary.  
+5. `/prompt-structure-auditor apply ORDER001` → only with explicit user confirm; agent uses `--yes`.  
+6. `/prompt-structure-auditor baseline` / `diff` → save + compare.  

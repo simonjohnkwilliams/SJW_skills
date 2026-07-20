@@ -131,40 +131,7 @@ def discover(repo: RepoFS, config: ConfigView | None = None) -> DiscoverResult:
 
 
 def render_discover(result: DiscoverResult) -> str:
-    """Human Discovery Summary for `psa discover`."""
-    instructions = [s for s in result.sources if s.subtype == "instruction"]
-    configs = [s for s in result.sources if s.subtype == "config"]
-    data = [s for s in result.sources if s.subtype == "data"]
+    """Deprecated alias — prefer psa.report.doctor.render_doctor."""
+    from psa.report.doctor import render_doctor
 
-    lines = [
-        "Discovery Summary",
-        "",
-        f"Instruction sources: {len(instructions)}",
-    ]
-    for s in instructions:
-        lines.append(f"  [x] {s.path}")
-        lines.append(f"      Reason: {s.inclusion_reason()}")
-    lines.append("")
-    lines.append(f"Config sources: {len(configs)}")
-    for s in configs:
-        lines.append(f"  [c] {s.path}")
-        lines.append(f"      Reason: {s.inclusion_reason()}")
-    if data:
-        lines.append("")
-        lines.append(f"Data sources (out of scope): {len(data)}")
-        for s in data:
-            lines.append(f"  [-] {s.path}")
-            lines.append(f"      Reason: {s.inclusion_reason()}")
-    lines.append("")
-    lines.append(f"Ignored: {len(result.ignored)}")
-    if result.ignored:
-        for m in result.ignored:
-            lines.append(f"  [!] {m.display_root}")
-            lines.append(f"      Reason: {m.reason}")
-            lines.append(f"      Pattern: {m.pattern}")
-        lines.append("")
-        lines.append("Override: pass --no-default-ignores to include ignored paths.")
-    else:
-        lines.append("  (none)")
-    lines.append("")
-    return "\n".join(lines)
+    return render_doctor(result)

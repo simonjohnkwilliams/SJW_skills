@@ -6,8 +6,8 @@ Implements [RFC 0001](../../docs/rfc/0001-prompt-structure-auditor.md) per
 ```bash
 pip install -e ".[dev]"
 pytest
-python -m psa inventory PATH
 python -m psa audit PATH
+python -m psa doctor PATH
 python -m psa patch preview ORDER001 PATH
 python -m psa patch validate ORDER001 PATH
 python -m psa patch apply ORDER001 PATH --yes   # git repo only

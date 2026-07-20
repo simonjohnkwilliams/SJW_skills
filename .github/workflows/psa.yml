@@ -27,8 +27,8 @@ jobs:
         run: pytest -q
       - name: CLI smoke (R1–R6)
         run: |
-          python -m psa discover tests/fixtures/vr3_demo
-          python -m psa inventory tests/fixtures/vr3_demo
+          python -m psa doctor tests/fixtures/vr3_demo
+          python -m psa audit tests/fixtures/vr3_demo
           python -m psa audit tests/fixtures/vr3_demo --format json > /tmp/audit.json
           python -m psa baseline save tests/fixtures/empty_repo --out /tmp/base.json
           python -m psa diff tests/fixtures/vr3_demo --baseline /tmp/base.json

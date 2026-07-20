@@ -361,9 +361,9 @@ def test_G003_vr3_live_order_not_noisy():
 # ---------------------------------------------------------------------------
 
 
-def test_CLI001_inventory():
+def test_CLI001_doctor():
     proc = subprocess.run(
-        [sys.executable, "-m", "psa", "inventory", str(FIXTURES / "vr3_demo")],
+        [sys.executable, "-m", "psa", "doctor", str(FIXTURES / "vr3_demo")],
         cwd=str(SCRIPTS),
         capture_output=True,
         text=True,
@@ -371,7 +371,8 @@ def test_CLI001_inventory():
         check=False,
     )
     assert proc.returncode == 0
-    assert "Prompt Surface Inventory" in proc.stdout
+    assert "Doctor" in proc.stdout
+    assert "Instruction Sources" in proc.stdout
 
 
 def test_CLI002_audit():
@@ -385,6 +386,8 @@ def test_CLI002_audit():
     )
     assert proc.returncode == 0
     assert "Findings" in proc.stdout
+    assert "Repository" in proc.stdout
+    assert "Honesty note" in proc.stdout
 
 
 def test_CLI003_format_json():

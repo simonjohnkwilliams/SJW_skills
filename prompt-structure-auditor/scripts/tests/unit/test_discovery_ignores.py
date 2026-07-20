@@ -5,7 +5,8 @@ from psa.core.config import DEFAULT_CONFIG
 from psa.core.ignore_globs import match_ignore
 from psa.core.pipeline import analyze
 from psa.core.ports import MemoryRepoFS
-from psa.discovery import discover, render_discover
+from psa.discovery import discover
+from psa.report.doctor import render_doctor
 from psa.report.inventory import render_inventory
 
 
@@ -79,17 +80,17 @@ def test_root_agents_still_discovered():
     assert result.ignored == ()
 
 
-def test_render_discover_summary():
+def test_render_doctor_summary():
     fs = MemoryRepoFS(
         {
             "AGENTS.md": "# A\n",
             "tests/fixtures/AGENTS.md": "# Should ignore\n",
         }
     )
-    text = render_discover(discover(fs))
-    assert "Discovery Summary" in text
-    assert "Instruction sources: 1" in text
-    assert "Ignored:" in text
+    text = render_doctor(discover(fs), DEFAULT_CONFIG)
+    assert "Doctor" in text
+    assert "Instruction Sources" in text
+    assert "Ignored" in text
     assert "--no-default-ignores" in text
 
 

@@ -18,9 +18,9 @@ def _env() -> dict[str, str]:
     return env
 
 
-def test_cli_discover_exit_zero():
+def test_cli_doctor_exit_zero():
     proc = subprocess.run(
-        [sys.executable, "-m", "psa", "discover", str(VR3)],
+        [sys.executable, "-m", "psa", "doctor", str(VR3)],
         cwd=str(SCRIPTS),
         capture_output=True,
         text=True,
@@ -28,11 +28,12 @@ def test_cli_discover_exit_zero():
         env=_env(),
     )
     assert proc.returncode == 0, proc.stderr
-    assert "Discovery Summary" in proc.stdout
-    assert "Reason:" in proc.stdout
+    assert "Doctor" in proc.stdout
+    assert "Instruction Sources" in proc.stdout
+    assert "Pattern matched" in proc.stdout or "Ignored" in proc.stdout
 
 
-def test_cli_inventory_exit_zero():
+def test_cli_inventory_removed():
     proc = subprocess.run(
         [sys.executable, "-m", "psa", "inventory", str(VR3)],
         cwd=str(SCRIPTS),
@@ -41,8 +42,28 @@ def test_cli_inventory_exit_zero():
         check=False,
         env=_env(),
     )
+    assert proc.returncode != 0
+
+
+def test_cli_audit_quiet_health_view():
+    proc = subprocess.run(
+        [sys.executable, "-m", "psa", "audit", str(VR3)],
+        cwd=str(SCRIPTS),
+        capture_output=True,
+        text=True,
+        check=False,
+        env=_env(),
+    )
     assert proc.returncode == 0, proc.stderr
-    assert "AGENTS" in proc.stdout or "Prompt Surface" in proc.stdout
+    assert "Repository" in proc.stdout
+    assert "Prompt Sources" in proc.stdout
+    assert "Status" in proc.stdout
+    assert "Findings" in proc.stdout
+    assert "Honesty note" in proc.stdout
+    assert "psa doctor" in proc.stdout
+    # Quiet: no full inventory dump / per-ignore listing
+    assert "Prompt Surface Inventory" not in proc.stdout
+    assert "Ignored (default exclusion)" not in proc.stdout
 
 
 def test_cli_audit_json_contains_findings_key():

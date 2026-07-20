@@ -10,13 +10,14 @@ from psa.core.canon import dumps
 from psa.core.config import DEFAULT_CONFIG, ConfigView
 from psa.core.pipeline import analyze
 from psa.core.ports import LocalRepoFS
-from psa.discovery import discover, render_discover
+from psa.discovery import discover
 from psa.lifecycle.baseline import load_baseline, save_baseline
 from psa.lifecycle.diff import diff_audits
 from psa.patch.apply import apply_patch
 from psa.patch.generate import preview_patch
 from psa.patch.validate import validate_patch
-from psa.report.inventory import render_human, render_inventory
+from psa.report.audit_view import render_audit, repo_display_name
+from psa.report.doctor import render_doctor
 
 
 def _add_ignore_flag(p: argparse.ArgumentParser) -> None:
@@ -34,22 +35,30 @@ def _config_from_args(args: argparse.Namespace) -> ConfigView:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="psa", description="Prompt Structure Auditor")
+    parser = argparse.ArgumentParser(
+        prog="psa",
+        description=(
+            "Prompt Structure Auditor — "
+            "audit (health) · doctor (why analysed) · patch lifecycle"
+        ),
+    )
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    p_disc = sub.add_parser("discover", help="Show discovery summary (sources + ignores)")
-    p_disc.add_argument("path", nargs="?", default=".", help="Repository path")
-    _add_ignore_flag(p_disc)
-
-    p_inv = sub.add_parser("inventory", help="Show prompt surface inventory")
-    p_inv.add_argument("path", nargs="?", default=".", help="Repository path")
-    _add_ignore_flag(p_inv)
-
-    p_audit = sub.add_parser("audit", help="Run full audit")
+    p_audit = sub.add_parser(
+        "audit",
+        help="Is my prompt architecture healthy? (primary command)",
+    )
     p_audit.add_argument("path", nargs="?", default=".", help="Repository path")
     p_audit.add_argument("--format", choices=("text", "json"), default="text")
     p_audit.add_argument("--out", default=None, help="Write output to file")
     _add_ignore_flag(p_audit)
+
+    p_doc = sub.add_parser(
+        "doctor",
+        help="Why was (or wasn't) something analysed? (diagnostics)",
+    )
+    p_doc.add_argument("path", nargs="?", default=".", help="Repository path")
+    _add_ignore_flag(p_doc)
 
     p_base = sub.add_parser("baseline", help="Baseline operations")
     base_sub = p_base.add_subparsers(dest="base_cmd", required=True)
@@ -188,18 +197,17 @@ def main(argv: list[str] | None = None) -> int:
 
     fs = LocalRepoFS(root)
 
-    if args.cmd == "discover":
-        print(render_discover(discover(fs, cfg)), end="")
+    if args.cmd == "doctor":
+        print(render_doctor(discover(fs, cfg), cfg), end="")
         return 0
 
     audit = analyze(fs, config=cfg)
 
-    if args.cmd == "inventory":
-        print(render_inventory(audit.inventory), end="")
-        return 0
-
     if args.cmd == "audit":
-        out = dumps(audit.to_dict()) if args.format == "json" else render_human(audit)
+        if args.format == "json":
+            out = dumps(audit.to_dict())
+        else:
+            out = render_audit(audit, repo_name=repo_display_name(root))
         if args.out:
             Path(args.out).write_text(out, encoding="utf-8")
         else:

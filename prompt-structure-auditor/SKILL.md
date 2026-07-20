@@ -4,11 +4,10 @@ description: >-
   Audits the repository prompt-construction surface (CLAUDE.md, AGENTS.md,
   Cursor rules, and related sources) for structural issues: ordering, volatility,
   duplication, activation metadata, and style. Produces evidence-backed findings,
-  a prioritised roadmap, ORDER001 patch preview/validate/apply, and baseline/diff
-  for continuous checks — with no fabricated cache scores. Use when the user runs
-  /prompt-structure-auditor, asks to audit prompt structure, inventory agent
-  instructions, preview/validate/apply an ORDER001 fix, or save/diff an audit
-  baseline.
+  ORDER001 patch preview/validate/apply, and baseline/diff — with no fabricated
+  cache scores. Use when the user runs /prompt-structure-auditor, asks to audit
+  prompt structure, run psa doctor on discovery, preview/validate/apply an
+  ORDER001 fix, or save/diff an audit baseline.
 disable-model-invocation: true
 ---
 
@@ -22,47 +21,33 @@ Preview and validate are read-only. Apply requires `--yes` after a passing valid
 
 ## Setup
 
-From the skill `scripts/` directory:
-
 ```powershell
-$env:PYTHONPATH = (Resolve-Path .).Path
+$env:PYTHONPATH = (Resolve-Path .).Path   # skill scripts/ directory
 python -m psa --help
 ```
 
-See [QUICKSTART.md](QUICKSTART.md) for release status and expected outputs.
-See [MANUAL_TEST.md](MANUAL_TEST.md) for the R1–R6 manual checklist.
+See [QUICKSTART.md](QUICKSTART.md) and [MANUAL_TEST.md](MANUAL_TEST.md).
+
+## Command map (one question each)
+
+| Command | Question |
+|---------|----------|
+| `psa audit` | Is my prompt architecture healthy? |
+| `psa doctor` | Why was (or wasn't) something analysed? |
+| `psa patch preview` | What exactly would change? |
+| `psa patch validate` | Is the proposed change safe? |
+| `psa patch apply` | Apply the validated change |
+
+There is **no** public `inventory` or `discover` command.
 
 ## Modes
 
-### Default — full flow through validate (`/prompt-structure-auditor`)
+### Default (`/prompt-structure-auditor`)
 
-When the user invokes the skill without a subcommand:
-
-1. Run **inventory** on the target repo (default: workspace root).
-2. Run **audit** (text). Present:
-   - Inventory
-   - Executive Summary
-   - **Fix these first (roadmap)**
-   - Findings (evidence-backed)
-   - Honesty note
-3. If `ORDER001` exists, run **patch preview**, then **patch validate**. Show diff + PASS/FAIL.
-4. **Do not apply** unless the user explicitly asks. Then re-validate and run
-   `python -m psa patch apply ORDER001 <path> --yes`.
-
-### `/prompt-structure-auditor discover`
-
-```powershell
-python -m psa discover <PATH>
-```
-
-Shows instruction/config counts, per-path inclusion reasons, and default ignores.
-Pass `--no-default-ignores` on discover/inventory/audit to include tests/fixtures.
-
-### `/prompt-structure-auditor inventory`
-
-```powershell
-python -m psa inventory <PATH>
-```
+1. Run **`python -m psa audit <PATH>`** (text). Present Repository, Status, Findings, Honesty note.
+2. If the user questions discovery (missing files, unexpected ignores), run **`psa doctor`**.
+3. If `ORDER001` exists and they want a change path: preview → validate.
+4. **Do not apply** unless explicitly asked (`--yes`).
 
 ### `/prompt-structure-auditor audit`
 
@@ -71,54 +56,27 @@ python -m psa audit <PATH>
 python -m psa audit <PATH> --format json
 ```
 
-### `/prompt-structure-auditor preview` (or `preview ORDER001`)
+### `/prompt-structure-auditor doctor`
+
+```powershell
+python -m psa doctor <PATH>
+python -m psa doctor <PATH> --no-default-ignores
+```
+
+### `/prompt-structure-auditor preview` / `validate` / `apply`
 
 ```powershell
 python -m psa patch preview ORDER001 <PATH>
-```
-
-Accepts a rule id (`ORDER001`) or finding id (`f_…`). Preview only — no writes.
-
-### `/prompt-structure-auditor validate` (or `validate ORDER001`)
-
-```powershell
 python -m psa patch validate ORDER001 <PATH>
-```
-
-Scratch re-audit; exit 0 only if the target is resolved and the audit does not worsen.
-
-### `/prompt-structure-auditor apply` (or `apply ORDER001`)
-
-```powershell
 python -m psa patch apply ORDER001 <PATH> --yes
 ```
 
-Requires a git repository. Creates `psa/fix-…` branch, one commit, prints rollback.
-Refuse if the user has not confirmed apply.
-
-### `/prompt-structure-auditor baseline`
+### `/prompt-structure-auditor baseline` / `diff`
 
 ```powershell
 python -m psa baseline save <PATH> --out .psa-baseline.json
-```
-
-### `/prompt-structure-auditor diff`
-
-```powershell
-python -m psa diff <PATH> --baseline .psa-baseline.json
 python -m psa diff <PATH> --baseline .psa-baseline.json --fail-on-introduced
 ```
-
-## Release availability (agent must respect)
-
-| Release | Available |
-|---------|-----------|
-| R1 Audit | Yes |
-| R2 Prioritise | Yes (part of audit report) |
-| R3 Preview | Yes (`ORDER001` only) |
-| R4 Validate | Yes |
-| R5 Apply | Yes (local git; `--yes` required) |
-| R6 Baseline/diff/CI | Yes |
 
 ## Hard rules
 
@@ -126,3 +84,4 @@ python -m psa diff <PATH> --baseline .psa-baseline.json --fail-on-introduced
 - Every finding must cite evidence the user can open.
 - Analysis, preview, and validate are read-only.
 - Apply only after explicit user confirmation and a passing validate.
+- Prefer `audit` for day-to-day; use `doctor` only for discovery troubleshooting.

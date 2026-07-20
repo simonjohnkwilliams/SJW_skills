@@ -22,7 +22,9 @@ from psa.core.pipeline import analyze
 from psa.core.ports import LocalRepoFS
 from psa.patch.generate import preview_patch
 from psa.patch.validate import validate_patch
-from psa.report.inventory import render_human, render_inventory
+from psa.report.audit_view import render_audit
+from psa.report.doctor import render_doctor
+from psa.report.inventory import render_human
 from tests.conftest import FIXTURES, LIVE_VR1, LIVE_VR2, LIVE_VR3
 
 SCRIPTS = Path(__file__).resolve().parents[2]
@@ -81,20 +83,21 @@ def target(request) -> tuple[str, Path, bool]:
 
 
 class TestRelease1Audit:
-    def test_r1_inventory_cli(self, target: tuple[str, Path, bool]):
+    def test_r1_doctor_cli(self, target: tuple[str, Path, bool]):
         name, path, _ = target
-        proc = _cli("inventory", str(path))
+        proc = _cli("doctor", str(path))
         assert proc.returncode == 0, f"{name}: {proc.stderr}"
-        assert "Prompt Surface Inventory" in proc.stdout
+        assert "Doctor" in proc.stdout
+        assert "Instruction Sources" in proc.stdout
 
     def test_r1_audit_text_has_honesty(self, target: tuple[str, Path, bool]):
         name, path, _ = target
         audit = analyze(LocalRepoFS(path), tool_version="0.1.0")
-        text = render_human(audit)
+        text = render_audit(audit, repo_name=name)
         assert "Honesty note" in text
-        assert "hit rate" in text.lower() or "cache hit" in text.lower() or "does not measure" in text
-        inv = render_inventory(audit.inventory)
-        assert "Prompt Surface Inventory" in inv or "inventory" in inv.lower()
+        assert "psa doctor" in text
+        assert "Repository" in text
+        assert "Prompt Sources" in text
 
     def test_r1_audit_json_shape_no_fabricated(self, target: tuple[str, Path, bool]):
         name, path, _ = target
