@@ -9,7 +9,7 @@ Skills teach the agent how to perform specialized workflows. Each skill is a dir
 | Skill | Definition |
 |-------|------------|
 | [cache-audit](./cache-audit/) | Audits prompt context for prompt-cache reuse and reports early volatility. |
-| [prompt-structure-auditor](./prompt-structure-auditor/) | Deterministic prompt-architecture lint (inventory, audit, prioritise, ORDER001 preview). See [QUICKSTART](./prompt-structure-auditor/QUICKSTART.md). |
+| [prompt-structure-auditor](./prompt-structure-auditor/) | Deterministic prompt-architecture lint (audit → prioritise → preview/validate/apply → baseline/diff). See [QUICKSTART](./prompt-structure-auditor/QUICKSTART.md). |
 
 ## Quickstart
 

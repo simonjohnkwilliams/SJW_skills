@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
 from pathlib import Path
 
@@ -10,7 +11,9 @@ from psa.core.pipeline import analyze
 from psa.core.ports import LocalRepoFS
 from psa.lifecycle.baseline import load_baseline, save_baseline
 from psa.lifecycle.diff import diff_audits
+from psa.patch.apply import apply_patch
 from psa.patch.generate import preview_patch
+from psa.patch.validate import validate_patch
 from psa.report.inventory import render_human, render_inventory
 
 
@@ -36,15 +39,37 @@ def main(argv: list[str] | None = None) -> int:
     p_diff.add_argument("path", nargs="?", default=".", help="Repository path")
     p_diff.add_argument("--baseline", required=True, help="Baseline JSON path")
     p_diff.add_argument("--format", choices=("text", "json"), default="text")
-
-    p_patch = sub.add_parser("patch", help="Patch operations (preview only in this release)")
-    patch_sub = p_patch.add_subparsers(dest="patch_cmd", required=True)
-    p_prev = patch_sub.add_parser("preview", help="Preview mechanical patch for a finding or rule id")
-    p_prev.add_argument(
-        "finding_id",
-        help="Finding id (f_…) or rule id (e.g. ORDER001) from audit output",
+    p_diff.add_argument(
+        "--fail-on-introduced",
+        action="store_true",
+        help="Exit 1 if any findings were introduced (CI ratchet)",
     )
-    p_prev.add_argument("path", nargs="?", default=".", help="Repository path")
+
+    p_patch = sub.add_parser("patch", help="Patch preview / validate / apply")
+    patch_sub = p_patch.add_subparsers(dest="patch_cmd", required=True)
+
+    def _add_finding_path(p: argparse.ArgumentParser) -> None:
+        p.add_argument(
+            "finding_id",
+            help="Finding id (f_…) or rule id (e.g. ORDER001)",
+        )
+        p.add_argument("path", nargs="?", default=".", help="Repository path")
+
+    p_prev = patch_sub.add_parser("preview", help="Preview mechanical patch (no writes)")
+    _add_finding_path(p_prev)
+
+    p_val = patch_sub.add_parser("validate", help="Re-audit scratch copy; must not worsen")
+    _add_finding_path(p_val)
+    p_val.add_argument("--format", choices=("text", "json"), default="text")
+
+    p_app = patch_sub.add_parser("apply", help="Apply validated patch on a new git branch")
+    _add_finding_path(p_app)
+    p_app.add_argument("--branch", default=None, help="Branch name override")
+    p_app.add_argument(
+        "--yes",
+        action="store_true",
+        help="Required confirmation flag to write to the repository",
+    )
 
     args = parser.parse_args(argv)
 
@@ -58,7 +83,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"baseline saved: {args.out}")
         return 0
 
-    if args.cmd == "patch" and args.patch_cmd == "preview":
+    if args.cmd == "patch":
         root = Path(args.path).resolve()
         if not root.exists():
             print(f"path not found: {root}", file=sys.stderr)
@@ -70,8 +95,66 @@ def main(argv: list[str] | None = None) -> int:
         except ValueError as exc:
             print(str(exc), file=sys.stderr)
             return 2
-        print(patch.diff, end="")
-        return 0
+
+        if args.patch_cmd == "preview":
+            print(patch.diff, end="")
+            return 0
+
+        if args.patch_cmd == "validate":
+            result = validate_patch(fs, audit, patch)
+            if args.format == "json":
+                print(dumps(result.to_dict()), end="")
+            else:
+                print("Patch Validation")
+                print(f"  Target:     {patch.rule_id} ({patch.finding_id})")
+                print(f"  Result:     {'PASS' if result.ok else 'FAIL'}")
+                print(f"  Resolved:   {len(result.resolved)}")
+                print(f"  Introduced: {len(result.introduced)}")
+                print(f"  Worsened:   {len(result.worsened)}")
+                for msg in result.failures:
+                    print(f"  - {msg}")
+                if result.introduced:
+                    print("  Introduced ids:")
+                    for i in result.introduced:
+                        print(f"    - {i}")
+            return 0 if result.ok else 1
+
+        if args.patch_cmd == "apply":
+            if not args.yes:
+                print(
+                    "Refusing to apply without --yes. "
+                    "Run validate first, then: psa patch apply … --yes",
+                    file=sys.stderr,
+                )
+                return 2
+            result = validate_patch(fs, audit, patch)
+            if not result.ok:
+                print("Validation failed; apply aborted.", file=sys.stderr)
+                for msg in result.failures:
+                    print(f"  - {msg}", file=sys.stderr)
+                return 1
+            try:
+                applied = apply_patch(
+                    root,
+                    audit,
+                    patch,
+                    validated=True,
+                    validation=result,
+                    branch=args.branch,
+                )
+            except (ValueError, OSError, subprocess.CalledProcessError) as exc:
+                print(f"apply failed: {exc}", file=sys.stderr)
+                return 1
+
+            print("Patch Applied")
+            print(f"  Branch:  {applied.branch}")
+            print(f"  Commit:  {applied.commit}")
+            print(f"  Path:    {applied.path}")
+            print(f"  Message: {applied.message}")
+            print(applied.rollback_instructions)
+            return 0
+
+        return 1
 
     root = Path(args.path).resolve()
     if not root.exists():
@@ -82,15 +165,11 @@ def main(argv: list[str] | None = None) -> int:
     audit = analyze(fs)
 
     if args.cmd == "inventory":
-        text = render_inventory(audit.inventory)
-        print(text, end="")
+        print(render_inventory(audit.inventory), end="")
         return 0
 
     if args.cmd == "audit":
-        if args.format == "json":
-            out = dumps(audit.to_dict())
-        else:
-            out = render_human(audit)
+        out = dumps(audit.to_dict()) if args.format == "json" else render_human(audit)
         if args.out:
             Path(args.out).write_text(out, encoding="utf-8")
         else:
@@ -115,6 +194,8 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  Reprioritised: {len(d.reprioritised)}")
                 for fid, old, new in d.reprioritised:
                     print(f"    - {fid}: {old} -> {new}")
+        if args.fail_on_introduced and d.introduced:
+            return 1
         return 0
 
     return 1

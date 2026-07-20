@@ -9,14 +9,14 @@ CLI package: **`psa`** (under `prompt-structure-auditor/scripts/`)
 
 | Release | Outcome | Status |
 |---------|---------|--------|
-| **R1 – Audit (read-only)** | Tell me what's wrong | **Ready for manual test** |
-| **R2 – Prioritise** | Tell me what to fix first | **Ready** (roadmap + “Fix these first”) |
-| **R3 – Preview** | Show the exact change | **Ready** for `ORDER001` only |
-| **R4 – Validate** | Prove fix does not worsen audit | **Not built** |
-| **R5 – Apply** | Apply validated fix on a branch | **Not built** |
-| **R6 – Continuous** | Baselines / diff / CI health | **Partial** (`baseline save` + `diff`; no CI yet) |
+| **R1 – Audit (read-only)** | Tell me what's wrong | **Ready** |
+| **R2 – Prioritise** | Tell me what to fix first | **Ready** |
+| **R3 – Preview** | Show the exact change | **Ready** (`ORDER001` only) |
+| **R4 – Validate** | Prove fix does not worsen audit | **Ready** |
+| **R5 – Apply** | Apply validated fix on a git branch | **Ready** (local git repos; not OneDrive) |
+| **R6 – Continuous** | Baselines / diff / CI | **Ready** |
 
-**Manual-test focus now:** R1 → R2 → R3 (stop before apply). Treat R4/R5 as unavailable.
+Manual-test focus: walk R1 → R6 using [MANUAL_TEST.md](MANUAL_TEST.md).
 
 ---
 
@@ -25,7 +25,7 @@ CLI package: **`psa`** (under `prompt-structure-auditor/scripts/`)
 ```powershell
 cd c:\Users\simon\cursor\SJW_skills\prompt-structure-auditor\scripts
 $env:PYTHONPATH = (Get-Location).Path
-# Optional: python -m pytest
+python -m pytest
 ```
 
 In Cursor, install/copy the skill so `@prompt-structure-auditor` / `/prompt-structure-auditor` works, or run the CLI from `scripts/` as below.
@@ -34,7 +34,7 @@ In Cursor, install/copy the skill so `@prompt-structure-auditor` / `/prompt-stru
 
 ## Skill invocations (Cursor)
 
-### Full guided flow (until preview — not apply)
+### Full guided flow (through validate; apply only if asked)
 
 ```
 /prompt-structure-auditor
@@ -43,7 +43,7 @@ In Cursor, install/copy the skill so `@prompt-structure-auditor` / `/prompt-stru
 or
 
 ```
-@prompt-structure-auditor audit this repository end-to-end through preview
+@prompt-structure-auditor audit this repository end-to-end through validate
 ```
 
 **Agent should:**
@@ -51,8 +51,8 @@ or
 1. Run inventory  
 2. Run audit (text)  
 3. Summarise “Fix these first” from the roadmap  
-4. If an `ORDER001` finding exists and user wants a preview, run patch preview  
-5. **Stop** — do not validate/apply unless those commands exist and the user explicitly asks  
+4. If an `ORDER001` finding exists, run **patch preview**, then **patch validate**  
+5. **Apply only** when the user explicitly asks (`--yes`); never apply by default  
 
 ### Per-release commands (agent or CLI)
 
@@ -61,6 +61,8 @@ or
 | `/prompt-structure-auditor inventory` | R1 inventory |
 | `/prompt-structure-auditor audit` | R1+R2 audit + prioritise |
 | `/prompt-structure-auditor preview ORDER001` | R3 preview |
+| `/prompt-structure-auditor validate ORDER001` | R4 validate |
+| `/prompt-structure-auditor apply ORDER001` | R5 apply (requires confirm) |
 | `/prompt-structure-auditor baseline` | R6 save baseline |
 | `/prompt-structure-auditor diff` | R6 compare to baseline |
 
@@ -143,21 +145,68 @@ python -m psa patch preview ORDER001 .
 - Only mechanical move for ORDER001 today  
 - Non-patchable rules (e.g. STYLE001) error clearly  
 
-### Not available yet
+---
+
+## Release 4 — Validate
 
 ```powershell
-python -m psa patch validate ORDER001   # R4 — missing
-python -m psa patch apply ORDER001      # R5 — missing
+python -m psa patch validate ORDER001 .
+python -m psa patch validate ORDER001 . --format json
 ```
+
+### Expected
+
+```
+Patch Validation
+  Target:     ORDER001 (f_…)
+  Result:     PASS
+  Resolved:   N
+  Introduced: 0
+  Worsened:   0
+```
+
+- Exit **0** on PASS, **1** on FAIL  
+- Scratch copy only — **no writes** to the target repo  
+- FAIL if target not resolved, new findings introduced, or priority worsens  
 
 ---
 
-## Release 6 (partial) — Baseline / diff
+## Release 5 — Apply
+
+Requires a **local git repository** (apply is refused on non-git trees). Prefer a throwaway clone; avoid OneDrive-synced paths if git is flaky there.
+
+```powershell
+# Always validate first (apply also re-validates)
+python -m psa patch validate ORDER001 .
+python -m psa patch apply ORDER001 . --yes
+# optional: --branch psa/fix-order001-demo
+```
+
+Without `--yes`, apply exits **2** and writes nothing.
+
+### Expected
+
+```
+Patch Applied
+  Branch:  psa/fix-order001-…
+  Commit:  <sha>
+  Path:    AGENTS.md
+  Message: psa: apply ORDER001 (…)
+Rollback: git checkout - && git branch -D …
+```
+
+Working tree is on the new branch with one commit. Use the printed rollback instructions to undo.
+
+---
+
+## Release 6 — Continuous (baseline / diff / CI)
 
 ```powershell
 python -m psa baseline save . --out .psa-baseline.json
 # … change prompt files …
 python -m psa diff . --baseline .psa-baseline.json
+# CI ratchet — non-zero if anything new appeared:
+python -m psa diff . --baseline .psa-baseline.json --fail-on-introduced
 ```
 
 ### Expected
@@ -171,17 +220,27 @@ Audit Diff
 
 No composite quality score.
 
+### CI
+
+Workflow: `.github/workflows/psa.yml` — installs `psa`, runs pytest, and smokes inventory/audit/baseline/diff/preview/validate on fixtures.
+
 ---
 
-## Suggested manual test path (this handoff)
+## Suggested manual test path
 
-1. **R1** on fixture `tests\fixtures\vr3_demo` — inventory + audit text + JSON  
-2. **R1** on live VR1 (empty honesty) / VR2 (ACT) / VR3 (ORDER+STYLE+DUP)  
-3. **R2** — confirm “Fix these first” + dependency lines  
-4. **R3** — `patch preview ORDER001` on fixture; confirm no file writes  
-5. **Stop** — do not expect validate/apply  
+1. **R1** on `tests\fixtures\vr3_demo` — inventory + audit text + JSON  
+2. **R2** — confirm “Fix these first” + dependency lines  
+3. **R3** — `patch preview ORDER001`; confirm no file writes  
+4. **R4** — `patch validate ORDER001` → PASS  
+5. **R5** — copy fixture into a temp git repo; `apply … --yes`; confirm branch + rollback  
+6. **R6** — baseline on empty fixture, diff against vr3, `--fail-on-introduced` → exit 1  
 
-Automated gate: `python -m pytest` → expect **85+** passed.
+Automated gate: `python -m pytest` → expect **120+** passed.  
+R1–R4 release matrix (fixtures + live sample repos when present):
+
+```powershell
+python -m pytest tests/acceptance/test_releases_r1_r4.py -v -s
+```
 
 ---
 
@@ -189,4 +248,4 @@ Automated gate: `python -m pytest` → expect **85+** passed.
 
 - Observable vs inference labelled  
 - No cache hit rate / cost / latency / token-saving metrics  
-- Analysis is read-only until R5 Apply (not shipped)  
+- Analysis and preview/validate are read-only; apply writes only with `--yes` after validation  

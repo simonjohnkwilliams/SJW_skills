@@ -19,7 +19,7 @@ from psa.report.inventory import render_human, render_inventory
 from psa.rules import run_rules
 from tests.conftest import FIXTURES, LIVE_VR1, LIVE_VR2, LIVE_VR3
 
-SCRIPTS = Path(__file__).resolve().parents[1]
+SCRIPTS = Path(__file__).resolve().parents[2]
 FABRICATED = {
     "score",
     "cache_score",
