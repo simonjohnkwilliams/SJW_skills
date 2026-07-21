@@ -17,8 +17,8 @@ jobs:
       run:
         working-directory: prompt-structure-auditor/scripts
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Install package
@@ -30,7 +30,10 @@ jobs:
           python -m psa doctor tests/fixtures/vr3_demo
           python -m psa audit tests/fixtures/vr3_demo
           python -m psa audit tests/fixtures/vr3_demo --format json > /tmp/audit.json
+          python -m psa plan tests/fixtures/vr3_demo
+          python -m psa preview tests/fixtures/vr3_demo
+          python -m psa preview --step 1 tests/fixtures/vr3_demo
+          python -m psa advise tests/fixtures/vr3_demo --brief-only > /tmp/advise-brief.json
+          python -m psa advise tests/fixtures/vr3_demo --judgment tests/fixtures/advise_judgment.json
           python -m psa baseline save tests/fixtures/empty_repo --out /tmp/base.json
           python -m psa diff tests/fixtures/vr3_demo --baseline /tmp/base.json
-          python -m psa patch preview ORDER001 tests/fixtures/vr3_demo > /tmp/preview.diff
-          python -m psa patch validate ORDER001 tests/fixtures/vr3_demo
