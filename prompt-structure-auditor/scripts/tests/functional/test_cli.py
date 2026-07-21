@@ -104,7 +104,39 @@ def test_cli_audit_json_contains_findings_key():
     assert '"findings"' in proc.stdout
 
 
-def test_cli_patch_preview_order001():
+def test_cli_preview_overview():
+    proc = subprocess.run(
+        [sys.executable, "-m", "psa", "preview", str(VR3)],
+        cwd=str(SCRIPTS),
+        capture_output=True,
+        text=True,
+        check=False,
+        env=_env(),
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "Prompt Structure Preview" in proc.stdout
+    assert "Implementation Plan" in proc.stdout
+    assert "Repository Impact" in proc.stdout
+    assert "@@" not in proc.stdout
+    assert "--- a/" not in proc.stdout
+
+
+def test_cli_preview_step():
+    proc = subprocess.run(
+        [sys.executable, "-m", "psa", "preview", "--step", "1", str(VR3)],
+        cwd=str(SCRIPTS),
+        capture_output=True,
+        text=True,
+        check=False,
+        env=_env(),
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "Intent" in proc.stdout
+    assert "Implementation" in proc.stdout
+    assert "@@" not in proc.stdout
+
+
+def test_cli_patch_preview_deprecated():
     proc = subprocess.run(
         [sys.executable, "-m", "psa", "patch", "preview", "ORDER001", str(VR3)],
         cwd=str(SCRIPTS),
@@ -113,8 +145,9 @@ def test_cli_patch_preview_order001():
         check=False,
         env=_env(),
     )
-    assert proc.returncode == 0, proc.stderr
-    assert "@@" in proc.stdout or "---" in proc.stdout
+    assert proc.returncode == 2
+    assert "deprecated" in proc.stderr.lower()
+    assert "psa preview" in proc.stderr
 
 
 def test_cli_patch_validate_order001():

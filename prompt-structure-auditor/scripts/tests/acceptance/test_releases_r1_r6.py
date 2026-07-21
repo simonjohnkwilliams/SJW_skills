@@ -230,42 +230,50 @@ class TestRelease2Plan:
 
 
 # ---------------------------------------------------------------------------
-# R3 — Preview (matrix: patchable vs consistent refusal)
+# R3 — Semantic Preview (implementation plans; no diffs)
 # ---------------------------------------------------------------------------
 
 
 class TestRelease3Preview:
     def test_r3_preview_matrix(self, target: tuple[str, Path, bool]):
         name, path, _ = target
-        audit = analyze(LocalRepoFS(path), tool_version="0.1.0")
-        proc = _cli("patch", "preview", "ORDER001", str(path))
-        if "ORDER001" in _rule_ids(audit):
-            assert proc.returncode == 0, f"{name}: {proc.stderr}"
-            assert "---" in proc.stdout or "@@" in proc.stdout
-        else:
-            assert proc.returncode != 0, f"{name}: preview must fail without ORDER001"
-            assert proc.stderr.strip(), f"{name}: refusal must explain why"
+        proc = _cli("preview", str(path))
+        assert proc.returncode == 0, f"{name}: {proc.stderr}"
+        assert "Prompt Structure Preview" in proc.stdout
+        assert "Implementation Plan" in proc.stdout
+        assert "Repository Impact" in proc.stdout
+        assert "@@" not in proc.stdout
+        assert "--- a/" not in proc.stdout
 
-    def test_r3_preview_no_writes_when_patchable(self):
+    def test_r3_preview_no_writes(self):
         path = FIXTURES / "vr3_demo"
         agents = path / "AGENTS.md"
         before = agents.read_text(encoding="utf-8")
-        assert _cli("patch", "preview", "ORDER001", str(path)).returncode == 0
+        assert _cli("preview", str(path)).returncode == 0
+        assert _cli("preview", "--step", "1", str(path)).returncode == 0
         assert agents.read_text(encoding="utf-8") == before
 
-    def test_r3_preview_api_matches_cli(self):
+    def test_r3_preview_step_matches_plan_count(self):
         path = FIXTURES / "vr3_demo"
-        fs = LocalRepoFS(path)
-        audit = analyze(fs, tool_version="0.1.0")
-        patch = preview_patch(fs, audit, "ORDER001")
-        proc = _cli("patch", "preview", "ORDER001", str(path))
-        assert proc.returncode == 0
-        assert patch.diff.strip() == proc.stdout.strip() or patch.diff in proc.stdout
+        audit = analyze(LocalRepoFS(path), tool_version="0.1.0")
+        n = len(audit.dependency_graph.plan)
+        assert n >= 1
+        for i in range(1, n + 1):
+            proc = _cli("preview", "--step", str(i), str(path))
+            assert proc.returncode == 0, proc.stderr
+            assert "Intent" in proc.stdout
+            assert "Implementation" in proc.stdout
+            assert "@@" not in proc.stdout
+        bad = _cli("preview", "--step", str(n + 1), str(path))
+        assert bad.returncode == 2
+        assert "Invalid step" in bad.stderr
 
-    def test_r3_preview_non_patchable_errors(self):
+    def test_r3_patch_preview_deprecated(self):
         path = FIXTURES / "vr3_demo"
-        proc = _cli("patch", "preview", "STYLE001", str(path))
-        assert proc.returncode != 0
+        proc = _cli("patch", "preview", "ORDER001", str(path))
+        assert proc.returncode == 2
+        assert "deprecated" in proc.stderr.lower()
+        assert "psa preview" in proc.stderr
 
 
 # ---------------------------------------------------------------------------
@@ -417,14 +425,19 @@ def test_r1_to_r6_matrix_summary(capsys, tmp_path: Path):
             )
 
         r3 = r4 = "n/a"
+        prev = _cli("preview", str(path))
+        r3 = (
+            "OK"
+            if prev.returncode == 0
+            and "Prompt Structure Preview" in prev.stdout
+            and "Repository Impact" in prev.stdout
+            and "@@" not in prev.stdout
+            else "FAIL"
+        )
         if "ORDER001" in ids:
-            prev = _cli("patch", "preview", "ORDER001", str(path))
             val = _cli("patch", "validate", "ORDER001", str(path))
-            r3 = "OK" if prev.returncode == 0 else "FAIL"
             r4 = "OK" if val.returncode == 0 and "PASS" in val.stdout else "FAIL"
         else:
-            prev = _cli("patch", "preview", "ORDER001", str(path))
-            r3 = "OK" if prev.returncode != 0 else "FAIL"
             r4 = "n/a"
 
         refuse = _cli("patch", "apply", "ORDER001", str(path))

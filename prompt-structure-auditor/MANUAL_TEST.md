@@ -22,7 +22,7 @@ User guide: [QUICKSTART.md](QUICKSTART.md)
 | Phase 1 acceptance suite (A–I) | Yes |
 | ORDER001 false-positive fix (On Hold / Debugging) | Yes |
 | R2 Roadmap + “Fix these first” + dependency hints | Yes |
-| R3 `psa patch preview` (ORDER001; finding id or rule id) | Yes |
+| R3 `psa preview` / `--step` (semantic implementation; no diffs) | Yes |
 | R4 `psa patch validate` (scratch re-audit; invariant) | Yes |
 | R5 `psa patch apply` (git branch + commit + `--yes` + rollback text) | Yes |
 | R6 `baseline save` / `diff` / `--fail-on-introduced` + GitHub Actions | Yes |
@@ -67,15 +67,18 @@ python -m psa audit .\tests\fixtures\vr3_demo   # must NOT contain Recommended P
 
 ---
 
-### 3) R3 — Preview (no writes)
+### 3) R3 — Preview (no writes, no diffs)
 
 ```powershell
 git status --porcelain   # optional baseline
-python -m psa patch preview ORDER001 .\tests\fixtures\vr3_demo
+python -m psa preview .\tests\fixtures\vr3_demo
+python -m psa preview --step 1 .\tests\fixtures\vr3_demo
 git status --porcelain   # unchanged
 ```
 
-**Pass if:** unified diff only; working tree unchanged; `STYLE001` preview errors clearly if tried.
+**Pass if:** overview has Summary + Implementation Plan + Repository Impact; step detail has Overview + Intent + Implementation Plan (Purpose/Actions) + Result + Repository Changes; no unified diffs; working tree unchanged; `psa patch preview` is deprecated (exit 2).
+
+**Contract tests:** `python -m pytest tests/acceptance/test_preview_contract_r3.py`
 
 ---
 

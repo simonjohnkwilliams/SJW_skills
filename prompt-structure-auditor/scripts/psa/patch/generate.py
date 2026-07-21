@@ -1,4 +1,4 @@
-"""Mechanical patch generation — preview only (RFC §12.2 step 1)."""
+"""Mechanical patch generation — internal to Validate/Apply (not public Preview)."""
 from __future__ import annotations
 
 import re

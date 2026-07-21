@@ -19,6 +19,7 @@ from psa.patch.validate import validate_patch
 from psa.report.audit_view import render_audit, repo_display_name
 from psa.report.doctor import render_doctor
 from psa.report.plan_view import render_plan
+from psa.report.preview_view import render_preview, render_preview_step
 
 
 def _add_ignore_flag(p: argparse.ArgumentParser) -> None:
@@ -40,7 +41,7 @@ def main(argv: list[str] | None = None) -> int:
         prog="psa",
         description=(
             "Prompt Structure Auditor — "
-            "audit (health) · plan (remediation) · doctor · patch lifecycle"
+            "audit · plan · preview · doctor · patch validate/apply"
         ),
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -62,6 +63,20 @@ def main(argv: list[str] | None = None) -> int:
     p_plan.add_argument("--format", choices=("text", "json"), default="text")
     p_plan.add_argument("--out", default=None, help="Write output to file")
     _add_ignore_flag(p_plan)
+
+    p_preview = sub.add_parser(
+        "preview",
+        help="What will PSA change? (implementation preview; read-only)",
+    )
+    p_preview.add_argument("path", nargs="?", default=".", help="Repository path")
+    p_preview.add_argument(
+        "--step",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Show implementation detail for recommendation step N",
+    )
+    _add_ignore_flag(p_preview)
 
     p_doc = sub.add_parser(
         "doctor",
@@ -88,7 +103,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     _add_ignore_flag(p_diff)
 
-    p_patch = sub.add_parser("patch", help="Patch preview / validate / apply")
+    p_patch = sub.add_parser("patch", help="Patch validate / apply (mechanical)")
     patch_sub = p_patch.add_subparsers(dest="patch_cmd", required=True)
 
     def _add_finding_path(p: argparse.ArgumentParser) -> None:
@@ -99,7 +114,10 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("path", nargs="?", default=".", help="Repository path")
         _add_ignore_flag(p)
 
-    p_prev = patch_sub.add_parser("preview", help="Preview mechanical patch (no writes)")
+    p_prev = patch_sub.add_parser(
+        "preview",
+        help="Deprecated — use `psa preview` (semantic implementation preview)",
+    )
     _add_finding_path(p_prev)
 
     p_val = patch_sub.add_parser("validate", help="Re-audit scratch copy; must not worsen")
@@ -133,6 +151,17 @@ def main(argv: list[str] | None = None) -> int:
         if not root.exists():
             print(f"path not found: {root}", file=sys.stderr)
             return 2
+
+        if args.patch_cmd == "preview":
+            print(
+                "psa patch preview is deprecated and is no longer the Preview product.\n"
+                "Use:  psa preview [PATH]\n"
+                "      psa preview --step N [PATH]\n"
+                "Mechanical transforms remain internal to patch validate / apply.",
+                file=sys.stderr,
+            )
+            return 2
+
         fs = LocalRepoFS(root)
         audit = analyze(fs, config=cfg)
         try:
@@ -140,10 +169,6 @@ def main(argv: list[str] | None = None) -> int:
         except ValueError as exc:
             print(str(exc), file=sys.stderr)
             return 2
-
-        if args.patch_cmd == "preview":
-            print(patch.diff, end="")
-            return 0
 
         if args.patch_cmd == "validate":
             result = validate_patch(fs, audit, patch)
@@ -240,6 +265,19 @@ def main(argv: list[str] | None = None) -> int:
             Path(args.out).write_text(out, encoding="utf-8")
         else:
             print(out, end="")
+        return 0
+
+    if args.cmd == "preview":
+        name = repo_display_name(root)
+        if args.step is not None:
+            try:
+                out = render_preview_step(audit, args.step, repo_name=name)
+            except ValueError as exc:
+                print(str(exc), file=sys.stderr)
+                return 2
+        else:
+            out = render_preview(audit, repo_name=name)
+        print(out, end="")
         return 0
 
     if args.cmd == "diff":

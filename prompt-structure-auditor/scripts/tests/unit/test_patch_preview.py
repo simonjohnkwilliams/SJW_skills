@@ -1,4 +1,4 @@
-"""Tests for mechanical patch preview."""
+"""Tests for mechanical patch generation (Validate/Apply internals)."""
 from __future__ import annotations
 
 from tests.conftest import FIXTURES

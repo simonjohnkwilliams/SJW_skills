@@ -11,13 +11,14 @@ CLI package: **`psa`** (under `prompt-structure-auditor/scripts/`)
 |---------|----------------|
 | **`psa audit`** | What do I have, and is it healthy? |
 | **`psa plan`** | What should I fix first, and why? |
+| **`psa preview`** | What will PSA change? |
+| **`psa preview --step N`** | How will recommendation N be implemented? |
 | **`psa doctor`** | Why was (or wasn't) something analysed? |
-| `psa patch preview` | What exactly would change? (R3) |
-| `psa patch validate` | Is the proposed change safe? (R4) |
-| `psa patch apply` | Apply the validated change (R5) |
+| `psa patch validate` | If applied, is it safe? (R4) |
+| `psa patch apply` | Execute the validated change (R5) |
 | `psa baseline` / `diff` | Continuous comparison (R6) |
 
-**Product principle:** Audit and Plan are separate capabilities. `psa audit` is factual only. `psa plan` consumes audit findings and applies prioritisation.
+**Product principle:** Audit, Plan, and Preview are separate capabilities. Audit is factual. Plan prioritises solutions. Preview explains implementation — never emits patches or diffs.
 
 ### Architectural assets (mutually exclusive)
 
@@ -102,13 +103,39 @@ Future releases may append after **Expected end state** only.
 
 ---
 
+## Release 3 preview UX contract (frozen)
+
+`psa preview` is a **separate, stable public interface**. It answers implementation intent — not analysis, not validation.
+
+### Overview (`psa preview`)
+
+1. **Prompt Structure Preview** (title)
+2. **Summary** (Repository, Recommendations, Unique files affected, Files added/modified/removed, Expected status)
+3. **Implementation Plan** (Step | Recommendation | Files | Primary Change)
+4. **Repository Impact** (semantic bullets)
+
+### Step detail (`psa preview --step N`)
+
+1. **Prompt Structure Preview**
+2. **Recommendation**
+3. **Summary** (Effort, Unique files affected, Primary change)
+4. **Overview** (short scope paragraph)
+5. **Intent**
+6. **Implementation Plan** (per file: Purpose + Actions)
+7. **Result**
+8. **Repository Changes** (Modified / Added / Removed)
+
+Preview is read-only. It never emits unified diffs, patches, or validation output.
+
+---
+
 ## Where we are (release map)
 
 | Release | Outcome | Status |
 |---------|---------|--------|
 | **R1 – Audit** | Health report (frozen UX) | **Complete** |
-| **R2 – Plan** | `psa plan` frozen Recommended Plan | **Complete** (contract frozen) |
-| **R3 – Preview** | Exact change | Ready (`ORDER001`) |
+| **R2 – Plan** | `psa plan` frozen Recommended Plan | **Complete** |
+| **R3 – Preview** | Semantic implementation preview | **Complete** (contract frozen) |
 | **R4 – Validate** | Safe change | Ready |
 | **R5 – Apply** | Apply on branch | Ready |
 | **R6 – Continuous** | Baseline / diff / CI | Ready |
@@ -133,15 +160,17 @@ python -m pytest
 
 1. Run **`psa audit`** — present Summary + Findings only  
 2. Run **`psa plan`** when the user asks what to fix / prioritisation  
-3. If discovery looks wrong → **`psa doctor`**  
-4. Preview/validate/apply only when asked  
+3. Run **`psa preview`** / **`psa preview --step N`** for implementation intent  
+4. If discovery looks wrong → **`psa doctor`**  
+5. Validate/apply only when asked  
 
 | You say | Command |
 |---------|---------|
 | `audit` | `python -m psa audit <PATH>` |
 | `plan` | `python -m psa plan <PATH>` |
+| `preview` | `python -m psa preview <PATH>` |
+| `preview --step N` | `python -m psa preview --step N <PATH>` |
 | `doctor` | `python -m psa doctor <PATH>` |
-| `preview ORDER001` | `python -m psa patch preview ORDER001 <PATH>` |
 | `validate` / `apply` | patch validate / apply `--yes` |
 
 ---
@@ -151,6 +180,8 @@ python -m pytest
 ```powershell
 python -m psa audit .
 python -m psa plan .            # advisor — separate from audit
+python -m psa preview .         # implementation overview
+python -m psa preview --step 1  # one recommendation in detail
 python -m psa doctor .          # diagnostics only
 python -m psa audit . --format json
 ```
@@ -180,10 +211,9 @@ Findings
 
 ---
 
-## Releases 3–6 (unchanged commands)
+## Releases 4–6
 
 ```powershell
-python -m psa patch preview ORDER001 .
 python -m psa patch validate ORDER001 .
 python -m psa patch apply ORDER001 . --yes
 python -m psa baseline save . --out .psa-baseline.json
