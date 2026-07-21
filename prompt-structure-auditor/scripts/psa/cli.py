@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import argparse
-import subprocess
 import sys
 from pathlib import Path
 
+from psa.apply.engine import run_apply
 from psa.core.canon import dumps
 from psa.core.config import DEFAULT_CONFIG, ConfigView
 from psa.core.pipeline import analyze
@@ -13,13 +13,12 @@ from psa.core.ports import LocalRepoFS
 from psa.discovery import discover
 from psa.lifecycle.baseline import load_baseline, save_baseline
 from psa.lifecycle.diff import diff_audits
-from psa.patch.apply import apply_patch
-from psa.patch.generate import preview_patch
-from psa.patch.validate import validate_patch
 from psa.report.audit_view import render_audit, repo_display_name
 from psa.report.doctor import render_doctor
 from psa.report.plan_view import render_plan
 from psa.report.preview_view import render_preview, render_preview_step
+
+import os
 
 
 def _add_ignore_flag(p: argparse.ArgumentParser) -> None:
@@ -41,7 +40,7 @@ def main(argv: list[str] | None = None) -> int:
         prog="psa",
         description=(
             "Prompt Structure Auditor — "
-            "audit · plan · preview · doctor · patch validate/apply"
+            "audit · plan · preview · apply · doctor"
         ),
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -78,6 +77,25 @@ def main(argv: list[str] | None = None) -> int:
     )
     _add_ignore_flag(p_preview)
 
+    p_apply = sub.add_parser(
+        "apply",
+        help="Safely execute approved optimisation (internal validation)",
+    )
+    p_apply.add_argument("path", nargs="?", default=".", help="Repository path")
+    p_apply.add_argument(
+        "--step",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Apply only recommendation step N, then stop",
+    )
+    p_apply.add_argument(
+        "--dangerous",
+        action="store_true",
+        help="Continuous apply without confirmation (validation still runs)",
+    )
+    _add_ignore_flag(p_apply)
+
     p_doc = sub.add_parser(
         "doctor",
         help="Why was (or wasn't) something analysed? (diagnostics)",
@@ -103,7 +121,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     _add_ignore_flag(p_diff)
 
-    p_patch = sub.add_parser("patch", help="Patch validate / apply (mechanical)")
+    p_patch = sub.add_parser("patch", help="Deprecated mechanical patch commands")
     patch_sub = p_patch.add_subparsers(dest="patch_cmd", required=True)
 
     def _add_finding_path(p: argparse.ArgumentParser) -> None:
@@ -116,22 +134,24 @@ def main(argv: list[str] | None = None) -> int:
 
     p_prev = patch_sub.add_parser(
         "preview",
-        help="Deprecated — use `psa preview` (semantic implementation preview)",
+        help="Deprecated — use `psa preview`",
     )
     _add_finding_path(p_prev)
 
-    p_val = patch_sub.add_parser("validate", help="Re-audit scratch copy; must not worsen")
+    p_val = patch_sub.add_parser(
+        "validate",
+        help="Deprecated — validation is internal to `psa apply`",
+    )
     _add_finding_path(p_val)
     p_val.add_argument("--format", choices=("text", "json"), default="text")
 
-    p_app = patch_sub.add_parser("apply", help="Apply validated patch on a new git branch")
-    _add_finding_path(p_app)
-    p_app.add_argument("--branch", default=None, help="Branch name override")
-    p_app.add_argument(
-        "--yes",
-        action="store_true",
-        help="Required confirmation flag to write to the repository",
+    p_app = patch_sub.add_parser(
+        "apply",
+        help="Deprecated — use `psa apply`",
     )
+    _add_finding_path(p_app)
+    p_app.add_argument("--branch", default=None, help="Ignored (deprecated)")
+    p_app.add_argument("--yes", action="store_true", help="Ignored (deprecated)")
 
     args = parser.parse_args(argv)
     cfg = _config_from_args(args)
@@ -147,83 +167,57 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.cmd == "patch":
+        print(
+            "psa patch commands are deprecated.\n"
+            "Use:  psa preview [PATH]\n"
+            "      psa preview --step N [PATH]\n"
+            "      psa apply --step N [PATH]\n"
+            "      psa apply --dangerous [PATH]\n"
+            "Validation is an internal phase of psa apply.",
+            file=sys.stderr,
+        )
+        return 2
+
+    if args.cmd == "apply":
         root = Path(args.path).resolve()
         if not root.exists():
             print(f"path not found: {root}", file=sys.stderr)
             return 2
-
-        if args.patch_cmd == "preview":
+        if not (root / ".git").exists():
+            print(f"not a git repository: {root}", file=sys.stderr)
+            return 2
+        noninteractive = (
+            not sys.stdin.isatty()
+            or os.environ.get("PSA_NONINTERACTIVE", "").lower() in {"1", "true", "yes"}
+        )
+        if args.step is None and not args.dangerous and noninteractive:
             print(
-                "psa patch preview is deprecated and is no longer the Preview product.\n"
-                "Use:  psa preview [PATH]\n"
-                "      psa preview --step N [PATH]\n"
-                "Mechanical transforms remain internal to patch validate / apply.",
+                "Non-interactive apply requires --step N or --dangerous.",
                 file=sys.stderr,
             )
             return 2
 
-        fs = LocalRepoFS(root)
-        audit = analyze(fs, config=cfg)
+        def _confirm(prompt: str) -> bool:
+            try:
+                answer = input(f"{prompt} [y/N] ").strip().lower()
+            except EOFError:
+                return False
+            return answer in {"y", "yes"}
+
+        confirm = None if args.dangerous or args.step is not None else _confirm
         try:
-            patch = preview_patch(fs, audit, args.finding_id)
+            session = run_apply(
+                root,
+                step=args.step,
+                dangerous=args.dangerous,
+                config=cfg,
+                confirm=confirm,
+            )
         except ValueError as exc:
             print(str(exc), file=sys.stderr)
             return 2
-
-        if args.patch_cmd == "validate":
-            result = validate_patch(fs, audit, patch)
-            if args.format == "json":
-                print(dumps(result.to_dict()), end="")
-            else:
-                print("Patch Validation")
-                print(f"  Target:     {patch.rule_id} ({patch.finding_id})")
-                print(f"  Result:     {'PASS' if result.ok else 'FAIL'}")
-                print(f"  Resolved:   {len(result.resolved)}")
-                print(f"  Introduced: {len(result.introduced)}")
-                print(f"  Worsened:   {len(result.worsened)}")
-                for msg in result.failures:
-                    print(f"  - {msg}")
-                if result.introduced:
-                    print("  Introduced ids:")
-                    for i in result.introduced:
-                        print(f"    - {i}")
-            return 0 if result.ok else 1
-
-        if args.patch_cmd == "apply":
-            if not args.yes:
-                print(
-                    "Refusing to apply without --yes. "
-                    "Run validate first, then: psa patch apply … --yes",
-                    file=sys.stderr,
-                )
-                return 2
-            result = validate_patch(fs, audit, patch)
-            if not result.ok:
-                print("Validation failed; apply aborted.", file=sys.stderr)
-                for msg in result.failures:
-                    print(f"  - {msg}", file=sys.stderr)
-                return 1
-            try:
-                applied = apply_patch(
-                    root,
-                    audit,
-                    patch,
-                    validated=True,
-                    validation=result,
-                    branch=args.branch,
-                )
-            except (ValueError, OSError, subprocess.CalledProcessError) as exc:
-                print(f"apply failed: {exc}", file=sys.stderr)
-                return 1
-            print("Patch Applied")
-            print(f"  Branch:  {applied.branch}")
-            print(f"  Commit:  {applied.commit}")
-            print(f"  Path:    {applied.path}")
-            print(f"  Message: {applied.message}")
-            print(applied.rollback_instructions)
-            return 0
-
-        return 1
+        print(session.report, end="")
+        return session.exit_code
 
     root = Path(args.path).resolve()
     if not root.exists():

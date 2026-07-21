@@ -16,6 +16,7 @@ def _env() -> dict[str, str]:
     env = dict(os.environ)
     env.pop("PYTHONIOENCODING", None)
     env["PYTHONPATH"] = str(SCRIPTS) + os.pathsep + env.get("PYTHONPATH", "")
+    env["PSA_NONINTERACTIVE"] = "1"
     return env
 
 
@@ -136,9 +137,38 @@ def test_cli_preview_step():
     assert "@@" not in proc.stdout
 
 
-def test_cli_patch_preview_deprecated():
+def test_cli_patch_commands_deprecated():
+    for cmd in ("preview", "validate", "apply"):
+        args = [sys.executable, "-m", "psa", "patch", cmd, "ORDER001", str(VR3)]
+        if cmd == "apply":
+            args.append("--yes")
+        proc = subprocess.run(
+            args,
+            cwd=str(SCRIPTS),
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_env(),
+        )
+        assert proc.returncode == 2
+        assert "deprecated" in proc.stderr.lower() or "psa apply" in proc.stderr
+
+
+def test_cli_apply_requires_step_or_dangerous_non_tty(tmp_path: Path):
+    import shutil
+
+    demo = tmp_path / "nty"
+    shutil.copytree(FIXTURES / "order_apply", demo)
+    subprocess.run(["git", "init"], cwd=demo, check=True, capture_output=True)
+    subprocess.run(["git", "add", "-A"], cwd=demo, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-m", "init"],
+        cwd=demo,
+        check=True,
+        capture_output=True,
+    )
     proc = subprocess.run(
-        [sys.executable, "-m", "psa", "patch", "preview", "ORDER001", str(VR3)],
+        [sys.executable, "-m", "psa", "apply", str(demo)],
         cwd=str(SCRIPTS),
         capture_output=True,
         text=True,
@@ -146,34 +176,7 @@ def test_cli_patch_preview_deprecated():
         env=_env(),
     )
     assert proc.returncode == 2
-    assert "deprecated" in proc.stderr.lower()
-    assert "psa preview" in proc.stderr
-
-
-def test_cli_patch_validate_order001():
-    proc = subprocess.run(
-        [sys.executable, "-m", "psa", "patch", "validate", "ORDER001", str(VR3)],
-        cwd=str(SCRIPTS),
-        capture_output=True,
-        text=True,
-        check=False,
-        env=_env(),
-    )
-    assert proc.returncode == 0, proc.stderr
-    assert "PASS" in proc.stdout
-
-
-def test_cli_patch_apply_refuses_without_yes():
-    proc = subprocess.run(
-        [sys.executable, "-m", "psa", "patch", "apply", "ORDER001", str(VR3)],
-        cwd=str(SCRIPTS),
-        capture_output=True,
-        text=True,
-        check=False,
-        env=_env(),
-    )
-    assert proc.returncode == 2
-    assert "--yes" in proc.stderr
+    assert "--step" in proc.stderr or "--dangerous" in proc.stderr
 
 
 def test_cli_baseline_and_diff(tmp_path: Path):

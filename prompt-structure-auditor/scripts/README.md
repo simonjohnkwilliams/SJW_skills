@@ -10,9 +10,9 @@ python -m psa audit PATH
 python -m psa plan PATH
 python -m psa preview PATH
 python -m psa preview --step 1 PATH
+python -m psa apply --step 1 PATH
+python -m psa apply --dangerous PATH
 python -m psa doctor PATH
-python -m psa patch validate ORDER001 PATH
-python -m psa patch apply ORDER001 PATH --yes   # git repo only
 python -m psa baseline save PATH --out .psa-baseline.json
 python -m psa diff PATH --baseline .psa-baseline.json --fail-on-introduced
 ```

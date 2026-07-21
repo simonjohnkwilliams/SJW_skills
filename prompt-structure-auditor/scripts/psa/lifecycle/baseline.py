@@ -63,6 +63,12 @@ def _audit_from_dict(data: dict) -> Audit:
             unblocks=p.get("unblocks", ""),
             remaining_after=p.get("remaining_after", ""),
             rule_ids=tuple(p.get("rule_ids", [])),
+            optimisation_id=p.get("optimisation_id")
+            or (
+                f"opt:{p['rule_ids'][0]}"
+                if p.get("rule_ids")
+                else ""
+            ),
         )
         for p in dep.get("plan", [])
     )

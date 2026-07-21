@@ -147,6 +147,8 @@ def _findings_header_row() -> str:
 
 def _short_issue(f: Finding) -> str:
     title = f.title.strip().replace("|", "/")
+    if (f.explanation or "").startswith("Regression detected"):
+        title = "Regression — " + title
     if len(title) > 72:
         title = title[:69].rstrip() + "..."
     return _ascii_cell(title)

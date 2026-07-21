@@ -123,6 +123,7 @@ class PlanRecommendation:
     unblocks: str
     remaining_after: str
     rule_ids: tuple[str, ...] = ()
+    optimisation_id: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -139,7 +140,13 @@ class PlanRecommendation:
             "unblocks": self.unblocks,
             "remaining_after": self.remaining_after,
             "rule_ids": list(self.rule_ids),
+            "optimisation_id": self.optimisation_id,
         }
+
+
+def optimisation_id_for(rule_id: str) -> str:
+    """Stable optimisation identity — independent of plan step numbering."""
+    return f"opt:{rule_id.strip().upper()}"
 
 
 @dataclass(frozen=True)
@@ -262,6 +269,7 @@ def _build_plan(findings: tuple[Finding, ...]) -> tuple[PlanRecommendation, ...]
                 unblocks=meta.get("unblocks", ""),
                 remaining_after="",  # filled after ordering
                 rule_ids=(rule,),
+                optimisation_id=optimisation_id_for(rule),
             )
         )
 
@@ -365,6 +373,8 @@ def _order_plan(
                 unblocks=r.unblocks,
                 remaining_after=remaining_after,
                 rule_ids=r.rule_ids,
+                optimisation_id=r.optimisation_id
+                or (optimisation_id_for(r.rule_ids[0]) if r.rule_ids else ""),
             )
         )
     return tuple(ordered)

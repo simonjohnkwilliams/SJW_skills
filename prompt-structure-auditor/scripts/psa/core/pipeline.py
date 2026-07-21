@@ -63,6 +63,7 @@ def analyze(
     model = build_model(sources)
     raw = run_rules(model, cfg)
     findings = normalize_findings(raw)
+    findings = _annotate_regressions(repo, findings)
     inventory = build_inventory(sources, ignored=discovered.ignored)
     graph = build_recommendations(findings)
     return Audit(
@@ -76,3 +77,55 @@ def analyze(
         dependency_graph=graph,
         guidance=discovered.guidance,
     )
+
+
+def _annotate_regressions(
+    repo: RepoFS,
+    findings: tuple[Finding, ...],
+) -> tuple[Finding, ...]:
+    """If optimisation state exists, mark findings that reintroduce completed work."""
+    try:
+        from pathlib import Path
+
+        from psa.optimise.state import load_state
+        from psa.recommend.graph import optimisation_id_for
+    except ImportError:
+        return findings
+
+    try:
+        root = Path(repo.root())
+    except Exception:  # noqa: BLE001
+        return findings
+    state = load_state(root)
+    if state is None or not state.completed:
+        return findings
+    done = state.completed_ids()
+    out: list[Finding] = []
+    for f in findings:
+        oid = optimisation_id_for(f.rule_id)
+        if oid not in done:
+            out.append(f)
+            continue
+        note = (
+            f"Regression detected. Previously completed optimisation {oid} "
+            f"has been reintroduced. "
+        )
+        out.append(
+            Finding(
+                id=f.id,
+                rule_id=f.rule_id,
+                title=f.title,
+                category=f.category,
+                priority=f.priority,
+                verification=f.verification,
+                observability=f.observability,
+                confidence=f.confidence,
+                ownership=f.ownership,
+                evidence=f.evidence,
+                explanation=note + f.explanation,
+                recommendation=f.recommendation,
+                related=f.related,
+                patchable=f.patchable,
+            )
+        )
+    return tuple(out)

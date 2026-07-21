@@ -13,12 +13,13 @@ CLI package: **`psa`** (under `prompt-structure-auditor/scripts/`)
 | **`psa plan`** | What should I fix first, and why? |
 | **`psa preview`** | What will PSA change? |
 | **`psa preview --step N`** | How will recommendation N be implemented? |
+| **`psa apply --step N`** | Safely apply one recommendation |
+| **`psa apply`** | Continue optimisation (confirm between steps) |
+| **`psa apply --dangerous`** | Continue without confirmation (validation still runs) |
 | **`psa doctor`** | Why was (or wasn't) something analysed? |
-| `psa patch validate` | If applied, is it safe? (R4) |
-| `psa patch apply` | Execute the validated change (R5) |
 | `psa baseline` / `diff` | Continuous comparison (R6) |
 
-**Product principle:** Audit, Plan, and Preview are separate capabilities. Audit is factual. Plan prioritises solutions. Preview explains implementation — never emits patches or diffs.
+**Product principle:** Audit → Plan → Preview → Apply. Validation is internal to Apply. Preview never emits patches. Apply uses pluggable executors (ORDER001 today) on branch `psa/optimise`, and updates `.psa/state.json` + `PSA_STATUS.md`.
 
 ### Architectural assets (mutually exclusive)
 
@@ -135,9 +136,8 @@ Preview is read-only. It never emits unified diffs, patches, or validation outpu
 |---------|---------|--------|
 | **R1 – Audit** | Health report (frozen UX) | **Complete** |
 | **R2 – Plan** | `psa plan` frozen Recommended Plan | **Complete** |
-| **R3 – Preview** | Semantic implementation preview | **Complete** (contract frozen) |
-| **R4 – Validate** | Safe change | Ready |
-| **R5 – Apply** | Apply on branch | Ready |
+| **R3 – Preview** | Semantic implementation preview | **Complete** |
+| **R4/R5 – Apply** | Optimisation engine + persistent state | **Complete** |
 | **R6 – Continuous** | Baseline / diff / CI | Ready |
 
 ---
@@ -161,8 +161,8 @@ python -m pytest
 1. Run **`psa audit`** — present Summary + Findings only  
 2. Run **`psa plan`** when the user asks what to fix / prioritisation  
 3. Run **`psa preview`** / **`psa preview --step N`** for implementation intent  
-4. If discovery looks wrong → **`psa doctor`**  
-5. Validate/apply only when asked  
+4. Run **`psa apply --step N`** when the user wants to execute  
+5. If discovery looks wrong → **`psa doctor`**  
 
 | You say | Command |
 |---------|---------|
@@ -170,8 +170,9 @@ python -m pytest
 | `plan` | `python -m psa plan <PATH>` |
 | `preview` | `python -m psa preview <PATH>` |
 | `preview --step N` | `python -m psa preview --step N <PATH>` |
+| `apply --step N` | `python -m psa apply --step N <PATH>` |
+| `apply --dangerous` | `python -m psa apply --dangerous <PATH>` |
 | `doctor` | `python -m psa doctor <PATH>` |
-| `validate` / `apply` | patch validate / apply `--yes` |
 
 ---
 
@@ -182,6 +183,7 @@ python -m psa audit .
 python -m psa plan .            # advisor — separate from audit
 python -m psa preview .         # implementation overview
 python -m psa preview --step 1  # one recommendation in detail
+python -m psa apply --step 1    # apply one recommendation (git repo)
 python -m psa doctor .          # diagnostics only
 python -m psa audit . --format json
 ```
@@ -211,13 +213,15 @@ Findings
 
 ---
 
-## Releases 4–6
+## Apply + continuous (R4/R5 + R6)
 
 ```powershell
-python -m psa patch validate ORDER001 .
-python -m psa patch apply ORDER001 . --yes
+python -m psa apply --step 1 .
+python -m psa apply --dangerous .
 python -m psa baseline save . --out .psa-baseline.json
 python -m psa diff . --baseline .psa-baseline.json --fail-on-introduced
 ```
+
+Apply writes commits on `psa/optimise`, updates `.psa/state.json` and `PSA_STATUS.md`. Unsupported recommendation types are skipped cleanly (no executor yet).
 
 See [MANUAL_TEST.md](MANUAL_TEST.md).

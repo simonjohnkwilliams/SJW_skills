@@ -23,8 +23,7 @@ User guide: [QUICKSTART.md](QUICKSTART.md)
 | ORDER001 false-positive fix (On Hold / Debugging) | Yes |
 | R2 Roadmap + “Fix these first” + dependency hints | Yes |
 | R3 `psa preview` / `--step` (semantic implementation; no diffs) | Yes |
-| R4 `psa patch validate` (scratch re-audit; invariant) | Yes |
-| R5 `psa patch apply` (git branch + commit + `--yes` + rollback text) | Yes |
+| R4/R5 `psa apply` engine (internal validate; `.psa/state.json`; `psa/optimise`) | Yes |
 | R6 `baseline save` / `diff` / `--fail-on-introduced` + GitHub Actions | Yes |
 
 ## Setup
@@ -82,40 +81,21 @@ git status --porcelain   # unchanged
 
 ---
 
-### 4) R4 — Validate
-
-```powershell
-python -m psa patch validate ORDER001 .\tests\fixtures\vr3_demo
-python -m psa patch validate ORDER001 .\tests\fixtures\vr3_demo --format json
-```
-
-**Pass if:** `Result: PASS`, Introduced 0, exit code 0; fixture files unchanged.
-
----
-
-### 5) R5 — Apply (throwaway git repo)
+### 4–5) R4/R5 — Apply engine
 
 ```powershell
 $demo = Join-Path $env:TEMP "psa-apply-demo"
 Remove-Item -Recurse -Force $demo -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Path $demo | Out-Null
-Copy-Item .\tests\fixtures\vr3_demo\* $demo -Recurse
+Copy-Item .\tests\fixtures\order_apply $demo -Recurse
 Set-Location $demo
 git init
 git add -A
 git -c user.email=t@t -c user.name=t commit -m init
 $env:PYTHONPATH = "c:\Users\simon\cursor\SJW_skills\prompt-structure-auditor\scripts"
-python -m psa patch apply ORDER001 . --yes
-git log -1 --oneline
-git branch --show-current
-# Rollback when done:
-# git checkout main   # or master
-# git branch -D <psa/fix-…>
+python -m psa apply --step 1 .
 ```
 
-**Pass if:** refuses without `--yes` (exit 2); with `--yes` creates `psa/fix-…` branch, one commit, prints rollback text; `## CSV Format` appears before `## Current Focus` in `AGENTS.md`.
-
-**Skip / note:** apply on OneDrive-synced trees may be unreliable — use a local temp path.
+**Pass if:** lean Apply report (Status, Recommendation Applied, Repository Changed, Repository Status, Next Recommendation, Next Steps); no Optimisation Progress / file lists; branch is `psa/optimise`; `.psa/state.json` and `PSA_STATUS.md` exist; unsupported types skip cleanly; `psa patch validate` / `psa patch apply` are deprecated (exit 2).
 
 ---
 

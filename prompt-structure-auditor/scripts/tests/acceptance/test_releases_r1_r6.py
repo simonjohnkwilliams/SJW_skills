@@ -38,6 +38,7 @@ def _env() -> dict[str, str]:
     env = dict(os.environ)
     env.pop("PYTHONIOENCODING", None)
     env["PYTHONPATH"] = str(SCRIPTS) + os.pathsep + env.get("PYTHONPATH", "")
+    env["PSA_NONINTERACTIVE"] = "1"
     return env
 
 
@@ -277,60 +278,42 @@ class TestRelease3Preview:
 
 
 # ---------------------------------------------------------------------------
-# R4 — Validate
+# R4/R5 — Apply engine (validate internal; psa apply user-facing)
 # ---------------------------------------------------------------------------
 
 
-class TestRelease4Validate:
-    def test_r4_validate_matrix(self, target: tuple[str, Path, bool]):
+class TestRelease4And5Apply:
+    def test_r4_patch_validate_deprecated(self, target: tuple[str, Path, bool]):
         name, path, _ = target
-        audit = analyze(LocalRepoFS(path), tool_version="0.1.0")
         proc = _cli("patch", "validate", "ORDER001", str(path))
-        if "ORDER001" in _rule_ids(audit):
-            assert proc.returncode == 0, f"{name}: {proc.stderr}\n{proc.stdout}"
-            assert "Patch Validation" in proc.stdout
-            assert "PASS" in proc.stdout
-            assert "Introduced:" in proc.stdout
-        else:
-            assert proc.returncode != 0, f"{name}: validate must fail without ORDER001"
+        assert proc.returncode == 2, f"{name}: patch validate must be deprecated"
+        assert "deprecated" in proc.stderr.lower()
+        assert "psa apply" in proc.stderr
 
-    def test_r4_validate_json_ok(self):
-        path = FIXTURES / "vr3_demo"
-        proc = _cli("patch", "validate", "ORDER001", str(path), "--format", "json")
-        assert proc.returncode == 0, proc.stderr
-        data = json.loads(proc.stdout)
-        assert data["ok"] is True
-        assert data["introduced"] == []
-
-    def test_r4_validate_api_invariant(self):
-        path = FIXTURES / "vr3_demo"
-        fs = LocalRepoFS(path)
-        audit = analyze(fs, tool_version="0.1.0")
-        patch = preview_patch(fs, audit, "ORDER001")
-        result = validate_patch(fs, audit, patch, tool_version="0.1.0")
-        assert result.ok is True, result.failures
-        assert patch.finding_id in result.resolved
-        assert result.introduced == ()
-
-
-# ---------------------------------------------------------------------------
-# R5 — Apply (never mutates live repos; refuse without --yes everywhere)
-# ---------------------------------------------------------------------------
-
-
-class TestRelease5Apply:
-    def test_r5_refuse_without_yes_on_all_targets(self, target: tuple[str, Path, bool]):
+    def test_r5_patch_apply_deprecated(self, target: tuple[str, Path, bool]):
         name, path, _ = target
-        audit = analyze(LocalRepoFS(path), tool_version="0.1.0")
-        proc = _cli("patch", "apply", "ORDER001", str(path))
-        assert proc.returncode != 0, f"{name}: apply without --yes must not succeed"
-        if "ORDER001" in _rule_ids(audit):
-            assert proc.returncode == 2, f"{name}: expected refuse without --yes"
-            assert "--yes" in proc.stderr
-        # Live repos must never be mutated by the suite (no --yes path here).
+        proc = _cli("patch", "apply", "ORDER001", str(path), "--yes")
+        assert proc.returncode == 2, f"{name}: patch apply must be deprecated"
+        assert "psa apply" in proc.stderr
 
-    def test_r5_apply_on_temp_fixture_copy(self, tmp_path: Path):
-        src = FIXTURES / "vr3_demo"
+    def test_r5_apply_non_tty_requires_flags(self, tmp_path: Path):
+        src = FIXTURES / "order_apply"
+        demo = tmp_path / "nty"
+        shutil.copytree(src, demo)
+        subprocess.run(["git", "init"], cwd=demo, check=True, capture_output=True)
+        subprocess.run(["git", "add", "-A"], cwd=demo, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-m", "init"],
+            cwd=demo,
+            check=True,
+            capture_output=True,
+        )
+        proc = _cli("apply", str(demo))
+        assert proc.returncode == 2
+        assert "--step" in proc.stderr or "--dangerous" in proc.stderr
+
+    def test_r5_apply_order001_on_temp_git(self, tmp_path: Path):
+        src = FIXTURES / "order_apply"
         demo = tmp_path / "apply-demo"
         shutil.copytree(src, demo)
         subprocess.run(["git", "init"], cwd=demo, check=True, capture_output=True)
@@ -341,11 +324,38 @@ class TestRelease5Apply:
             check=True,
             capture_output=True,
         )
-        proc = _cli("patch", "apply", "ORDER001", str(demo), "--yes")
+        proc = _cli("apply", "--step", "1", str(demo))
         assert proc.returncode == 0, proc.stderr + proc.stdout
-        assert "Patch Applied" in proc.stdout
-        assert "Branch:" in proc.stdout
-        assert "Rollback" in proc.stdout or "checkout" in proc.stdout.lower()
+        assert "Prompt Structure Apply" in proc.stdout
+        assert "Status: Success" in proc.stdout
+        assert "Repository Changed: Yes" in proc.stdout
+        assert "Repository re-analysed successfully." in proc.stdout
+        assert "Optimisations Applied This Run: 1" in proc.stdout
+        assert "Repository Status" in proc.stdout
+        assert "Next Recommendation" in proc.stdout
+        assert "Next Steps" in proc.stdout
+        assert "Health:" not in proc.stdout
+        assert "Completed Optimisations:" not in proc.stdout
+        assert "Optimisation Progress" not in proc.stdout
+        assert "Move volatile sections below stable guidance" in proc.stdout
+        assert (demo / ".psa" / "state.json").is_file()
+        assert (demo / "PSA_STATUS.md").is_file()
+        branch = subprocess.run(
+            ["git", "branch", "--show-current"],
+            cwd=demo,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        assert branch == "psa/optimise"
+
+    def test_r4_internal_validate_still_works(self):
+        path = FIXTURES / "order_apply"
+        fs = LocalRepoFS(path)
+        audit = analyze(fs, tool_version="0.1.0")
+        patch = preview_patch(fs, audit, "ORDER001")
+        result = validate_patch(fs, audit, patch, tool_version="0.1.0")
+        assert result.ok is True, result.failures
 
 
 # ---------------------------------------------------------------------------
@@ -434,17 +444,21 @@ def test_r1_to_r6_matrix_summary(capsys, tmp_path: Path):
             and "@@" not in prev.stdout
             else "FAIL"
         )
-        if "ORDER001" in ids:
-            val = _cli("patch", "validate", "ORDER001", str(path))
-            r4 = "OK" if val.returncode == 0 and "PASS" in val.stdout else "FAIL"
-        else:
-            r4 = "n/a"
+        dep_val = _cli("patch", "validate", "ORDER001", str(path))
+        r4 = (
+            "OK"
+            if dep_val.returncode == 2 and "psa apply" in dep_val.stderr
+            else "FAIL"
+        )
 
-        refuse = _cli("patch", "apply", "ORDER001", str(path))
-        if "ORDER001" in ids:
-            r5 = "OK" if refuse.returncode == 2 and "--yes" in refuse.stderr else "FAIL"
-        else:
-            r5 = "OK" if refuse.returncode != 0 else "FAIL"
+        # Non-interactive apply without --step/--dangerous must refuse
+        refuse = _cli("apply", str(path))
+        r5 = (
+            "OK"
+            if refuse.returncode == 2
+            and ("--step" in refuse.stderr or "--dangerous" in refuse.stderr or "git" in refuse.stderr)
+            else "FAIL"
+        )
 
         base = tmp_path / f"{name}.json"
         save = _cli("baseline", "save", str(path), "--out", str(base))
