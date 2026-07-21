@@ -47,7 +47,7 @@ def test_live_vr1_healthy_empty_instructions():
     assert "No prompt architecture issues detected" in text
     assert not any(
         ".cursor/skills/" in d or ".claude/skills/" in d or ".agents/" in d
-        for d in audit.documentation
+        for d in audit.guidance
     )
 
 
@@ -59,7 +59,7 @@ def test_live_vr2_activation_findings():
     act = [f for f in audit.findings if f.rule_id in {"ACT001", "ACT002"}]
     assert len(act) >= 1
     assert f"| Status | {STATUS_NEEDS_ATTENTION} |" in text
-    assert not any(".claude/skills/" in d for d in audit.documentation)
+    assert not any(".claude/skills/" in d for d in audit.guidance)
 
 
 @pytest.mark.skipif(not LIVE_VR3.is_dir(), reason="VR3 not present on this machine")
@@ -73,5 +73,5 @@ def test_live_vr3_finance_tracker_healthy():
     assert "No prompt architecture issues detected" in text
     assert not any(
         ".cursor/skills/" in d or ".claude/skills/" in d
-        for d in audit.documentation
+        for d in audit.guidance
     )

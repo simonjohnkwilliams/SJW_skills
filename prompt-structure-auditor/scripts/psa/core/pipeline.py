@@ -34,7 +34,12 @@ class Audit:
     findings: tuple[Finding, ...]
     inventory: PromptSurfaceInventory
     dependency_graph: DependencyGraph
-    documentation: tuple[str, ...] = ()
+    guidance: tuple[str, ...] = ()
+
+    @property
+    def documentation(self) -> tuple[str, ...]:
+        """Legacy alias for guidance (Guidance Surface)."""
+        return self.guidance
 
     def to_dict(self) -> dict:
         return {
@@ -42,7 +47,7 @@ class Audit:
             "inventory": self.inventory.to_dict(),
             "findings": [f.to_dict() for f in self.findings],
             "dependency_graph": self.dependency_graph.to_dict(),
-            "documentation": list(self.documentation),
+            "guidance": list(self.guidance),
         }
 
 
@@ -69,5 +74,5 @@ def analyze(
         findings=findings,
         inventory=inventory,
         dependency_graph=graph,
-        documentation=discovered.documentation,
+        guidance=discovered.guidance,
     )

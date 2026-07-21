@@ -20,7 +20,6 @@ from psa.core.ports import LocalRepoFS
 from psa.patch.generate import preview_patch
 from psa.patch.validate import validate_patch
 from psa.report.audit_view import render_audit
-from psa.report.inventory import render_human
 from tests.conftest import (
     ALL_TARGETS,
     FIXTURES,
@@ -116,7 +115,7 @@ class TestRelease1Audit:
         proc = _cli("audit", str(path), "--format", "json")
         assert proc.returncode == 0, f"{name}: {proc.stderr}"
         data = json.loads(proc.stdout)
-        for key in ("meta", "inventory", "findings", "dependency_graph", "documentation"):
+        for key in ("meta", "inventory", "findings", "dependency_graph", "guidance"):
             assert key in data, f"{name} missing {key}"
 
         def _walk_keys(obj) -> set[str]:
@@ -177,31 +176,57 @@ class TestRelease1Audit:
 # ---------------------------------------------------------------------------
 
 
-class TestRelease2Prioritise:
-    def test_r2_audit_format_unchanged(self, target: tuple[str, Path, bool]):
+class TestRelease2Plan:
+    def test_r2_audit_stays_factual(self, target: tuple[str, Path, bool]):
         name, path, _ = target
         text = render_audit(analyze(LocalRepoFS(path), tool_version="0.1.0"), repo_name=name)
         assert_frozen_audit_structure(text, name)
-        # R2 roadmap lives in JSON / render_human — not the public audit text
-        assert "Fix these first" not in text
+        assert "Recommended Plan" not in text
+        assert "Recommendation Details" not in text
 
-    def test_r2_roadmap_when_findings(self, target: tuple[str, Path, bool]):
+    def test_r2_plan_cli_frozen_contract(self, target: tuple[str, Path, bool]):
+        from tests.contract_plan import assert_frozen_plan_structure
+
         name, path, _ = target
         audit = analyze(LocalRepoFS(path), tool_version="0.1.0")
-        text = render_human(audit)
+        proc = _cli("plan", str(path))
+        assert proc.returncode == 0, f"{name}: {proc.stderr}"
+        assert_frozen_plan_structure(proc.stdout, name)
         if not audit.findings:
-            assert "Fix these first" not in text
-            assert audit.dependency_graph is None or not audit.dependency_graph.roadmap
-            return
-        assert "Fix these first (roadmap)" in text, name
-        assert audit.dependency_graph is not None
-        assert audit.dependency_graph.roadmap
+            assert "No action needed" in proc.stdout, name
+            assert "Already Healthy" in proc.stdout, name
+        else:
+            assert "Plan ready" in proc.stdout, name
+            assert "Why now" in proc.stdout, name
+            assert "Expected end state" in proc.stdout, name
+            assert "Unblocks" not in proc.stdout, name
 
-    def test_r2_vr3_dependencies_mention_order_after_style_or_dup(self):
+    def test_r2_plan_json(self, target: tuple[str, Path, bool]):
+        name, path, _ = target
+        proc = _cli("plan", str(path), "--format", "json")
+        assert proc.returncode == 0, f"{name}: {proc.stderr}"
+        data = json.loads(proc.stdout)
+        assert "plan" in data
+        assert "findings_considered" in data
+        for step in data["plan"]:
+            for key in (
+                "why_now",
+                "unblocks",
+                "remaining_after",
+                "estimated_effort",
+                "depends_on",
+                "findings",
+            ):
+                assert key in step, f"{name} plan step missing {key}"
+
+    def test_r2_vr3_dependencies_order_in_plan(self):
         path = FIXTURES / "vr3_demo"
-        text = render_human(analyze(LocalRepoFS(path), tool_version="0.1.0"))
-        assert "Dependencies" in text
-        assert "ORDER001" in text and ("STYLE001" in text or "DUP001" in text)
+        audit = analyze(LocalRepoFS(path), tool_version="0.1.0")
+        plan_rules = [p.rule_ids[0] for p in audit.dependency_graph.plan]
+        assert "ORDER001" in plan_rules
+        assert plan_rules.index("ORDER001") > min(
+            i for i, r in enumerate(plan_rules) if r in {"DUP001", "STYLE001"}
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -377,7 +402,19 @@ def test_r1_to_r6_matrix_summary(capsys, tmp_path: Path):
         except AssertionError:
             r1 = "FAIL"
 
-        r2 = "OK" if (not audit.findings or "Fix these first" in render_human(audit)) else "FAIL"
+        if not audit.findings:
+            plan_out = _cli("plan", str(path)).stdout
+            r2 = "OK" if "No action needed" in plan_out and "Recommended Plan" in plan_out else "FAIL"
+        else:
+            plan_out = _cli("plan", str(path)).stdout
+            r2 = (
+                "OK"
+                if "Plan ready" in plan_out
+                and "Why now" in plan_out
+                and "Expected end state" in plan_out
+                and "Recommended Plan" not in text
+                else "FAIL"
+            )
 
         r3 = r4 = "n/a"
         if "ORDER001" in ids:

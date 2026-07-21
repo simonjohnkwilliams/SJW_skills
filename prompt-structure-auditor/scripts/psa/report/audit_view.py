@@ -6,8 +6,9 @@ Exactly three headings, always, in this order:
 2. Summary                   (fixed fields table)
 3. Findings                  (table; placeholder row when empty)
 
-Future releases may append sections *after* Findings only.
-They must not rename, reorder, or reshape Summary or Findings.
+Release 2+ planning is a separate capability (`psa plan`) and must not appear here.
+Future releases may append sections *after* Findings only on their own commands —
+not by changing this audit contract.
 """
 from __future__ import annotations
 
@@ -25,7 +26,7 @@ FINDINGS_HEADING = "Findings"
 SUMMARY_FIELDS = (
     "Repository",
     "Active Prompt Sources",
-    "Documentation",
+    "Guidance",
     "Configuration",
     "Status",
     "Findings",
@@ -49,7 +50,7 @@ def render_audit(audit: Audit, *, repo_name: str | None = None) -> str:
     """Stable day-to-day audit text (CLI default). ASCII-safe for Windows consoles."""
     n_instr = sum(1 for r in audit.inventory.rows if r.status == "present")
     n_config = sum(1 for r in audit.inventory.rows if r.status == "config")
-    n_docs = len(audit.documentation)
+    n_guidance = len(audit.guidance)
 
     name = _ascii_cell(repo_name or "repository")
     status = STATUS_HEALTHY if not audit.findings else STATUS_NEEDS_ATTENTION
@@ -60,13 +61,15 @@ def render_audit(audit: Audit, *, repo_name: str | None = None) -> str:
         if n_instr == 1
         else f"{n_instr} instruction files"
     )
-    doc_label = f"{n_docs} file" if n_docs == 1 else f"{n_docs} files"
+    guidance_label = (
+        f"{n_guidance} file" if n_guidance == 1 else f"{n_guidance} files"
+    )
     config_label = f"{n_config} file" if n_config == 1 else f"{n_config} files"
 
     summary_values = {
         "Repository": name,
         "Active Prompt Sources": instr_label,
-        "Documentation": doc_label,
+        "Guidance": guidance_label,
         "Configuration": config_label,
         "Status": status,
         "Findings": findings_cell,

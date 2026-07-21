@@ -7,7 +7,13 @@ from psa.core.canon import dumps, loads
 from psa.core.pipeline import Audit, RunMeta
 from psa.findings import Finding
 from psa.model.types import Evidence
-from psa.recommend.graph import DependencyGraph, RecEdge, Recommendation
+from psa.recommend.graph import (
+    DependencyGraph,
+    PlanFindingRef,
+    PlanRecommendation,
+    RecEdge,
+    Recommendation,
+)
 from psa.report.inventory import InventoryRow, PromptSurfaceInventory
 
 
@@ -35,6 +41,31 @@ def _audit_from_dict(data: dict) -> Audit:
         for r in data.get("inventory", {}).get("rows", [])
     )
     dep = data.get("dependency_graph") or {}
+    plan = tuple(
+        PlanRecommendation(
+            id=p["id"],
+            title=p["title"],
+            priority=p["priority"],
+            reason=p["reason"],
+            addresses=tuple(p.get("addresses", [])),
+            findings=tuple(
+                PlanFindingRef(
+                    finding_id=f["finding_id"],
+                    rule_id=f["rule_id"],
+                    title=f["title"],
+                )
+                for f in p.get("findings", [])
+            ),
+            estimated_effort=p["estimated_effort"],
+            depends_on=tuple(p.get("depends_on", [])),
+            expected_outcome=p["expected_outcome"],
+            why_now=p.get("why_now", ""),
+            unblocks=p.get("unblocks", ""),
+            remaining_after=p.get("remaining_after", ""),
+            rule_ids=tuple(p.get("rule_ids", [])),
+        )
+        for p in dep.get("plan", [])
+    )
     graph = DependencyGraph(
         nodes=tuple(
             Recommendation(
@@ -66,6 +97,7 @@ def _audit_from_dict(data: dict) -> Audit:
             for n in dep.get("roadmap", [])
         ),
         cycles=tuple(tuple(c) for c in dep.get("cycles", [])),
+        plan=plan,
     )
     meta = data["meta"]
     return AuditCls(
@@ -77,7 +109,7 @@ def _audit_from_dict(data: dict) -> Audit:
         findings=findings,
         inventory=PromptSurfaceInventory(rows=inv_rows),
         dependency_graph=graph,
-        documentation=tuple(data.get("documentation", [])),
+        guidance=tuple(data.get("guidance") or data.get("documentation") or []),
     )
 
 

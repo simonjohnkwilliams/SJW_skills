@@ -18,6 +18,7 @@ from psa.patch.generate import preview_patch
 from psa.patch.validate import validate_patch
 from psa.report.audit_view import render_audit, repo_display_name
 from psa.report.doctor import render_doctor
+from psa.report.plan_view import render_plan
 
 
 def _add_ignore_flag(p: argparse.ArgumentParser) -> None:
@@ -39,19 +40,28 @@ def main(argv: list[str] | None = None) -> int:
         prog="psa",
         description=(
             "Prompt Structure Auditor — "
-            "audit (health) · doctor (why analysed) · patch lifecycle"
+            "audit (health) · plan (remediation) · doctor · patch lifecycle"
         ),
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p_audit = sub.add_parser(
         "audit",
-        help="Is my prompt architecture healthy? (primary command)",
+        help="What do I have, and is it healthy? (factual assessment)",
     )
     p_audit.add_argument("path", nargs="?", default=".", help="Repository path")
     p_audit.add_argument("--format", choices=("text", "json"), default="text")
     p_audit.add_argument("--out", default=None, help="Write output to file")
     _add_ignore_flag(p_audit)
+
+    p_plan = sub.add_parser(
+        "plan",
+        help="What should I fix first, and why? (Recommended Plan)",
+    )
+    p_plan.add_argument("path", nargs="?", default=".", help="Repository path")
+    p_plan.add_argument("--format", choices=("text", "json"), default="text")
+    p_plan.add_argument("--out", default=None, help="Write output to file")
+    _add_ignore_flag(p_plan)
 
     p_doc = sub.add_parser(
         "doctor",
@@ -208,6 +218,24 @@ def main(argv: list[str] | None = None) -> int:
             out = dumps(audit.to_dict())
         else:
             out = render_audit(audit, repo_name=repo_display_name(root))
+        if args.out:
+            Path(args.out).write_text(out, encoding="utf-8")
+        else:
+            print(out, end="")
+        return 0
+
+    if args.cmd == "plan":
+        if args.format == "json":
+            graph = audit.dependency_graph
+            out = dumps(
+                {
+                    "repository": repo_display_name(root),
+                    "findings_considered": len(audit.findings),
+                    "plan": [p.to_dict() for p in (graph.plan if graph else ())],
+                }
+            )
+        else:
+            out = render_plan(audit, repo_name=repo_display_name(root))
         if args.out:
             Path(args.out).write_text(out, encoding="utf-8")
         else:

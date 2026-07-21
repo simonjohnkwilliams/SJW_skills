@@ -51,6 +51,6 @@ def test_render_doctor_verbose():
     text = render_doctor(result, DEFAULT_CONFIG)
     assert "Doctor" in text
     assert "Instruction Sources" in text
-    assert "Documentation" in text
+    assert "Guidance Surface" in text
     assert "Pattern matched" in text
     assert "--no-default-ignores" in text

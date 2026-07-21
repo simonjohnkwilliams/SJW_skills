@@ -62,11 +62,32 @@ def test_cli_audit_quiet_health_view():
     assert "| Field | Result |" in proc.stdout
     assert "| Severity | Rule | Issue |" in proc.stdout
     assert "Needs Attention" in proc.stdout
+    assert "Recommended Plan" not in proc.stdout
+    assert "Estimated effort" not in proc.stdout
     assert "✅" not in proc.stdout
     assert "⚠" not in proc.stdout
     assert "Honesty note" not in proc.stdout
     assert "psa doctor" not in proc.stdout
     assert "Prompt Surface Inventory" not in proc.stdout
+    assert proc.stdout.encode("ascii")
+
+
+def test_cli_plan_recommended_plan():
+    proc = subprocess.run(
+        [sys.executable, "-m", "psa", "plan", str(VR3)],
+        cwd=str(SCRIPTS),
+        capture_output=True,
+        text=True,
+        check=False,
+        env=_env(),
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "Prompt Structure Plan" in proc.stdout
+    assert "Recommended Plan" in proc.stdout
+    assert "Recommendation Details" in proc.stdout
+    assert "Expected end state" in proc.stdout
+    assert "| Step | Recommendation | Effort | Resolves | Why now |" in proc.stdout
+    assert "Unblocks" not in proc.stdout
     assert proc.stdout.encode("ascii")
 
 

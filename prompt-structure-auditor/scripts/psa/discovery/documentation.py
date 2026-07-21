@@ -1,11 +1,19 @@
-"""Documentation surface — AI-relevant guidance, not all Markdown."""
+"""Guidance Surface — non-runtime assets that shape assistant behaviour.
+
+Product vocabulary (mutually exclusive buckets):
+
+  Instruction Assets  — runtime prompt surfaces (CLAUDE.md, AGENTS.md, rules, …)
+  Guidance Surface    — docs intended to shape assistant behaviour (not executed)
+
+Everything PSA discovers belongs in exactly one bucket. Nothing belongs in both.
+Guidance is counted for honesty/context only — it never produces findings.
+"""
 from __future__ import annotations
 
 import re
 
-# Filename / path tokens suggesting AI or assistant / prompt guidance.
-# Applied after tool-tree exclusions so ".cursor/skills/..." does not inflate counts.
-_AI_GUIDANCE = re.compile(
+# "Is this document intended to shape assistant behaviour?"
+_GUIDANCE_SIGNAL = re.compile(
     r"(prompt|agents?|claude|cursor|copilot|llm|"
     r"ai[-_ ]?(guid|workflow|coding|assistant|prompt)|"
     r"coding[-_ ]?standard|assistant|system[-_ ]?prompt|"
@@ -15,7 +23,7 @@ _AI_GUIDANCE = re.compile(
 
 _DOC_EXTS = (".md", ".mdx", ".rst", ".adoc", ".txt")
 
-# Installed skills, slash-commands, and agent packs are not project documentation.
+# Installed skills / tool packs are not project guidance.
 _EXCLUDE_PREFIXES = (
     ".cursor/skills/",
     ".claude/skills/",
@@ -26,7 +34,6 @@ _EXCLUDE_PREFIXES = (
     "vendor/",
 )
 
-# General project docs that must never inflate the Documentation metric.
 _EXCLUDE_NAMES = frozenset(
     {
         "license",
@@ -63,14 +70,25 @@ _EXCLUDE_PATH = re.compile(
     r"changelog|change[-_ ]?log|release[-_ ]?notes?|releases?|"
     r"api[-_ ]?(doc|docs|reference)|openapi|swagger|"
     r"contributing|code_of_conduct|license|licence|"
-    r"research/"  # benchmark / research dumps — not architecture guidance
+    r"research/"
     r")",
     re.IGNORECASE,
 )
 
+# Entire trees treated as Guidance Surface by placement intent.
+_GUIDANCE_ROOTS = (
+    "docs/ai/",
+    "docs/prompts/",
+    "docs/prompt/",
+    "docs/assistant/",
+    "docs/llm/",
+    "ai-guidance/",
+    "guidance/",
+)
 
-def is_documentation_path(path: str, *, instruction_paths: set[str]) -> bool:
-    """True if path is AI-/prompt-relevant documentation (not a runtime instruction)."""
+
+def is_guidance_path(path: str, *, instruction_paths: set[str]) -> bool:
+    """True if path is Guidance Surface (never an Instruction Asset)."""
     norm = path.replace("\\", "/")
     while norm.startswith("./"):
         norm = norm[2:]
@@ -89,20 +107,25 @@ def is_documentation_path(path: str, *, instruction_paths: set[str]) -> bool:
         return False
     if any(seg in ("node_modules", ".git", "vendor") for seg in norm.split("/")):
         return False
-    # Require an AI-/prompt-guidance signal on the filename (not tool-dir path noise).
-    # Also allow a path match when the file lives under a docs tree.
+    if any(lower.startswith(root) for root in _GUIDANCE_ROOTS):
+        return True
     under_docs = any(
         lower == d or lower.startswith(d)
         for d in ("docs/", "documentation/", "doc/")
     )
-    if _AI_GUIDANCE.search(name):
+    if _GUIDANCE_SIGNAL.search(name):
         return True
-    if under_docs and _AI_GUIDANCE.search(norm):
+    if under_docs and _GUIDANCE_SIGNAL.search(norm):
         return True
     return False
 
 
-def collect_documentation(
+# Back-compat alias for older tests/imports.
+def is_documentation_path(path: str, *, instruction_paths: set[str]) -> bool:
+    return is_guidance_path(path, instruction_paths=instruction_paths)
+
+
+def collect_guidance(
     files: list[str],
     *,
     instruction_paths: set[str],
@@ -116,6 +139,19 @@ def collect_documentation(
             norm = norm[2:]
         if norm in ignored:
             continue
-        if is_documentation_path(norm, instruction_paths=instruction_paths):
+        if is_guidance_path(norm, instruction_paths=instruction_paths):
             found.append(norm)
     return tuple(sorted(set(found)))
+
+
+def collect_documentation(
+    files: list[str],
+    *,
+    instruction_paths: set[str],
+    ignored_paths: set[str] | None = None,
+) -> tuple[str, ...]:
+    return collect_guidance(
+        files,
+        instruction_paths=instruction_paths,
+        ignored_paths=ignored_paths,
+    )

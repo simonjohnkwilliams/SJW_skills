@@ -45,7 +45,7 @@ python -m psa doctor .\tests\fixtures\vr3_demo
 python -m psa audit .\tests\fixtures\vr3_demo --format json
 ```
 
-**Pass if:** every `audit` starts with **Prompt Structure Auditor**, then **Summary**, then **Findings**, with the same field/column names; empty repos show Findings placeholder row and `Healthy`; issue repos show `Needs Attention` and a severity breakdown; no honesty note / ignore dumps / doctor hints / release or pipeline chatter in audit text; output is ASCII (no emoji). `doctor` still lists ignores and AI-relevant documentation paths.
+**Pass if:** every `audit` starts with **Prompt Structure Auditor**, then **Summary**, then **Findings** only — **no Recommended Plan**; empty repos show Findings placeholder and `Healthy`; issue repos show `Needs Attention`; ASCII output. Then `psa plan` shows Recommended Plan separately. `doctor` still lists ignores and Guidance Surface paths.
 
 **Contract tests:** `python -m pytest tests/acceptance/test_audit_contract_r1.py`
 
@@ -55,14 +55,15 @@ python -m psa audit .\tests\fixtures\vr3_demo --format json
 
 ---
 
-### 2) R2 — Prioritise
+### 2) R2 — Plan (separate from audit)
 
-In the text audit output, confirm:
+```powershell
+python -m psa plan .\tests\fixtures\vr3_demo
+python -m psa plan .\tests\fixtures\empty_repo
+python -m psa audit .\tests\fixtures\vr3_demo   # must NOT contain Recommended Plan
+```
 
-- Findings ordered by severity so you can answer “what do I fix first?”
-- JSON audit still exposes `dependency_graph.roadmap` for tooling
-
-**Pass if:** you can prioritise from Findings (and roadmap in JSON) without needing diagnostics in the text report.
+**Pass if:** `plan` has Summary + Recommended Plan table (with Why now) + compact Details + Expected end state; no Unblocks duplication; healthy repos show empty-state; structure identical across repos; `audit` remains factual only; plan never mentions preview/apply.
 
 ---
 

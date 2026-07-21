@@ -1,7 +1,7 @@
-"""Frozen public audit report contract helpers (Release 1+).
+"""Frozen public audit report contract helpers (Release 1).
 
-Used by acceptance, live validation, and every release stage so format stays
-identical across fixtures and IdeaProjects live repos.
+Audit answers: What do I have, and is it healthy?
+Plan is a separate capability (`psa plan`) and must not appear in audit text.
 """
 from __future__ import annotations
 
@@ -41,7 +41,6 @@ def assert_frozen_audit_structure(text: str, label: str = "audit") -> None:
     assert i_title < i_summary < i_findings, f"{label}: section order"
     assert text.encode("ascii"), f"{label}: not ASCII-safe"
     assert "✅" not in text and "⚠" not in text, f"{label}: emoji in audit"
-    # Development artefacts must stay out of the public report
     for bad in (
         "Honesty note",
         "psa doctor",
@@ -49,5 +48,10 @@ def assert_frozen_audit_structure(text: str, label: str = "audit") -> None:
         "Fix these first",
         "Implementation Roadmap",
         "Parser Failures",
+        "Recommended Plan",
+        "Recommendation Graph",
+        "dependency graph",
+        "Estimated effort",
+        "No remediation steps required.",
     ):
-        assert bad not in text, f"{label}: leaked artefact {bad!r}"
+        assert bad not in text, f"{label}: leaked plan/artefact into audit: {bad!r}"

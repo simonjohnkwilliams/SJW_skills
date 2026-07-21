@@ -44,12 +44,14 @@ def render_doctor(result: DiscoverResult, config: ConfigView | None = None) -> s
     else:
         lines.append("  (none)")
 
-    docs = list(result.documentation)
-    lines.extend(["", "Documentation (AI-relevant, not runtime)", f"  Count: {len(docs)}"])
+    docs = list(result.guidance)
+    lines.extend(["", "Guidance Surface (non-runtime)", f"  Count: {len(docs)}"])
     if docs:
         for path in docs:
-            lines.append(f"  [d] {path}")
-            lines.append("      Reason: AI-relevant documentation (prompt / assistant guidance)")
+            lines.append(f"  [g] {path}")
+            lines.append(
+                "      Reason: Intended to shape assistant behaviour (not a runtime instruction)"
+            )
     else:
         lines.append("  (none)")
 

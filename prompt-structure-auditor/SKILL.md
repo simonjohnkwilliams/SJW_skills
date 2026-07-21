@@ -4,9 +4,10 @@ description: >-
   Audits the repository prompt-construction surface (CLAUDE.md, AGENTS.md,
   Cursor rules, and related sources) for structural issues: ordering, volatility,
   duplication, activation metadata, and style. Produces evidence-backed findings,
-  ORDER001 patch preview/validate/apply, and baseline/diff — with no fabricated
-  cache scores. Use when the user runs /prompt-structure-auditor, asks to audit
-  prompt structure, run psa doctor on discovery, preview/validate/apply an
+  a separate Recommended Plan (`psa plan`), ORDER001 patch preview/validate/apply,
+  and baseline/diff — with no fabricated cache scores. Use when the user runs
+  /prompt-structure-auditor, asks to audit prompt structure, run psa plan for
+  remediation order, run psa doctor on discovery, preview/validate/apply an
   ORDER001 fix, or save/diff an audit baseline.
 disable-model-invocation: true
 ---
@@ -32,28 +33,37 @@ See [QUICKSTART.md](QUICKSTART.md) and [MANUAL_TEST.md](MANUAL_TEST.md).
 
 | Command | Question |
 |---------|----------|
-| `psa audit` | Is my prompt architecture healthy? |
+| `psa audit` | What do I have, and is it healthy? |
+| `psa plan` | What should I fix first, and why? |
 | `psa doctor` | Why was (or wasn't) something analysed? |
 | `psa patch preview` | What exactly would change? |
 | `psa patch validate` | Is the proposed change safe? |
 | `psa patch apply` | Apply the validated change |
 
-There is **no** public `inventory` or `discover` command.
+There is **no** public `inventory` or `discover` command. Audit never includes recommendations — use **`psa plan`** for that.
 
 ## Modes
 
 ### Default (`/prompt-structure-auditor`)
 
-1. Run **`python -m psa audit <PATH>`** (text). Present the frozen **Prompt Structure Auditor** title plus **Summary** and **Findings** tables as produced (do not invent extra sections).
-2. If the user questions discovery (missing files, unexpected ignores), run **`psa doctor`**.
-3. If `ORDER001` exists and they want a change path: preview → validate.
-4. **Do not apply** unless explicitly asked (`--yes`).
+1. Run **`python -m psa audit <PATH>`** (text). Present **Summary** and **Findings** only (do not invent recommendations).
+2. If the user asks what to fix / prioritise, run **`python -m psa plan <PATH>`** and present the **Recommended Plan**.
+3. If the user questions discovery (missing files, unexpected ignores), run **`psa doctor`**.
+4. If `ORDER001` exists and they want a change path: preview → validate.
+5. **Do not apply** unless explicitly asked (`--yes`).
 
 ### `/prompt-structure-auditor audit`
 
 ```powershell
 python -m psa audit <PATH>
 python -m psa audit <PATH> --format json
+```
+
+### `/prompt-structure-auditor plan`
+
+```powershell
+python -m psa plan <PATH>
+python -m psa plan <PATH> --format json
 ```
 
 ### `/prompt-structure-auditor doctor`
