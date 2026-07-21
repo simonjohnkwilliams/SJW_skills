@@ -15,6 +15,8 @@ def _env() -> dict[str, str]:
     """CLI env without forcing UTF-8 — audit output must be Windows-console safe."""
     env = dict(os.environ)
     env.pop("PYTHONIOENCODING", None)
+    env.pop("PSA_ADVISE_CMD", None)
+    env.pop("PSA_ADVISE_JUDGMENT", None)
     env["PYTHONPATH"] = str(SCRIPTS) + os.pathsep + env.get("PYTHONPATH", "")
     env["PSA_NONINTERACTIVE"] = "1"
     return env
@@ -152,6 +154,34 @@ def test_cli_patch_commands_deprecated():
         )
         assert proc.returncode == 2
         assert "deprecated" in proc.stderr.lower() or "psa apply" in proc.stderr
+
+
+def test_cli_advise_brief_only():
+    proc = subprocess.run(
+        [sys.executable, "-m", "psa", "advise", str(VR3), "--brief-only"],
+        cwd=str(SCRIPTS),
+        capture_output=True,
+        text=True,
+        check=False,
+        env=_env(),
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert '"schema"' in proc.stdout
+    assert "psa.advise.brief.v1" in proc.stdout
+
+
+def test_cli_advise_requires_bridge():
+    proc = subprocess.run(
+        [sys.executable, "-m", "psa", "advise", str(VR3)],
+        cwd=str(SCRIPTS),
+        capture_output=True,
+        text=True,
+        check=False,
+        env=_env(),
+        stdin=subprocess.DEVNULL,
+    )
+    assert proc.returncode == 2
+    assert "Advise requires" in proc.stderr or "embedded AI" in proc.stderr.lower()
 
 
 def test_cli_apply_requires_step_or_dangerous_non_tty(tmp_path: Path):

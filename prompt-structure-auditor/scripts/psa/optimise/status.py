@@ -18,6 +18,7 @@ def render_status_md(
     repo_name: str,
     health: str,
     findings_count: int,
+    repo_root: Path | None = None,
 ) -> str:
     lines = [
         "# PSA Status",
@@ -44,6 +45,22 @@ def render_status_md(
             lines.append(f"- `{o.optimisation_id}` — {o.title}")
     else:
         lines.append("- None")
+
+    lines.extend(["", "## Advise Backlog", ""])
+    snap = None
+    if repo_root is not None:
+        from psa.advise.persist import load_advise
+
+        snap = load_advise(repo_root)
+    if snap and snap.items:
+        if snap.summary_theme:
+            lines.append(f"- Theme: {snap.summary_theme}")
+        lines.append(f"- Last run: {snap.created_at or '-'}")
+        for item in snap.items:
+            seed = f" → seed `{item.rule_seed_id}`" if item.rule_seed_id else ""
+            lines.append(f"- `{item.id}` [{item.kind}] {item.title}{seed}")
+    else:
+        lines.append("- None (run `psa advise` with an embedded AI caller)")
 
     lines.extend(["", "## Optimisation History", ""])
     if state.completed:
@@ -74,6 +91,7 @@ def render_status_md(
             "## Repository Summary",
             "",
             "PSA tracks optimisation progress in `.psa/state.json`. "
+            "Advise backlog lives in `.psa/advise.json` (promotable; never auto-applied). "
             "Git records commits on `psa/optimise`. "
             "Audit always analyses the repository from scratch.",
             "",
@@ -97,6 +115,7 @@ def write_status_md(
             repo_name=repo_name,
             health=health,
             findings_count=findings_count,
+            repo_root=repo_root,
         ),
         encoding="utf-8",
     )

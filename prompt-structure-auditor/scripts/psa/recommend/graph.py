@@ -56,6 +56,18 @@ _ENABLE_REASON: dict[tuple[str, str], str] = {
 }
 
 
+def deterministic_rule_catalog() -> tuple[dict[str, str], ...]:
+    """Public catalog of deterministic plan rules (for Advise exclusions)."""
+    return tuple(
+        {
+            "id": rid,
+            "intent": meta["reason"],
+            "plan_title": meta["title"],
+        }
+        for rid, meta in sorted(_RULE_PLAN.items())
+    )
+
+
 @dataclass(frozen=True)
 class Recommendation:
     finding_id: str

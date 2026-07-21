@@ -24,6 +24,7 @@ User guide: [QUICKSTART.md](QUICKSTART.md)
 | R2 Roadmap + “Fix these first” + dependency hints | Yes |
 | R3 `psa preview` / `--step` (semantic implementation; no diffs) | Yes |
 | R4/R5 `psa apply` engine (internal validate; `.psa/state.json`; `psa/optimise`) | Yes |
+| R5 `psa advise` (brief + embedded AI judgment; `.psa/advise.json`) | Yes |
 | R6 `baseline save` / `diff` / `--fail-on-introduced` + GitHub Actions | Yes |
 
 ## Setup
@@ -96,6 +97,20 @@ python -m psa apply --step 1 .
 ```
 
 **Pass if:** lean Apply report (Status, Recommendation Applied, Repository Changed, Repository Status, Next Recommendation, Next Steps); no Optimisation Progress / file lists; branch is `psa/optimise`; `.psa/state.json` and `PSA_STATUS.md` exist; unsupported types skip cleanly; `psa patch validate` / `psa patch apply` are deprecated (exit 2).
+
+---
+
+### 5b) R5 — Advise (embedded AI scout)
+
+```powershell
+cd c:\Users\simon\cursor\SJW_skills\prompt-structure-auditor\scripts
+$env:PYTHONPATH = (Get-Location).Path
+python -m psa advise .\tests\fixtures\order_apply --brief-only
+python -m psa advise .\tests\fixtures\order_apply   # expect exit 2 without bridge
+python -m psa advise .\tests\fixtures\order_apply --judgment .\tests\fixtures\advise_judgment.json
+```
+
+**Pass if:** brief JSON has `schema=psa.advise.brief.v1` and `rule_catalog`; bare advise fails with embedded AI message; judgment run prints **Prompt Structure Advise** with Advisory Recommendations + Investigation Points; `.psa/advise.json` written; `PSA_STATUS.md` has **Advise Backlog**.
 
 ---
 

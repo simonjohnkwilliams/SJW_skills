@@ -91,6 +91,10 @@ def render_apply_report(
         ]
     )
 
+    one_liner = (session.advise_one_liner or "").strip()
+    if one_liner:
+        lines.extend([_ascii(one_liner), ""])
+
     # --- Next Recommendation ---
     lines.extend(["Next Recommendation", ""])
     if n_outstanding and plan:

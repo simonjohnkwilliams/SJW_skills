@@ -12,6 +12,8 @@ python -m psa preview PATH
 python -m psa preview --step 1 PATH
 python -m psa apply --step 1 PATH
 python -m psa apply --dangerous PATH
+python -m psa advise PATH --brief-only
+python -m psa advise PATH --judgment judgment.json
 python -m psa doctor PATH
 python -m psa baseline save PATH --out .psa-baseline.json
 python -m psa diff PATH --baseline .psa-baseline.json --fail-on-introduced

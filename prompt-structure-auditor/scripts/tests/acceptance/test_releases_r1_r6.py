@@ -37,6 +37,8 @@ FABRICATED = ("score", "hit_rate", "latency", "cost", "token_saving", "token_sav
 def _env() -> dict[str, str]:
     env = dict(os.environ)
     env.pop("PYTHONIOENCODING", None)
+    env.pop("PSA_ADVISE_CMD", None)
+    env.pop("PSA_ADVISE_JUDGMENT", None)
     env["PYTHONPATH"] = str(SCRIPTS) + os.pathsep + env.get("PYTHONPATH", "")
     env["PSA_NONINTERACTIVE"] = "1"
     return env
@@ -338,6 +340,7 @@ class TestRelease4And5Apply:
         assert "Completed Optimisations:" not in proc.stdout
         assert "Optimisation Progress" not in proc.stdout
         assert "Move volatile sections below stable guidance" in proc.stdout
+        assert "run psa advise" not in proc.stdout  # no bridge → no Advise line
         assert (demo / ".psa" / "state.json").is_file()
         assert (demo / "PSA_STATUS.md").is_file()
         branch = subprocess.run(
@@ -356,6 +359,87 @@ class TestRelease4And5Apply:
         patch = preview_patch(fs, audit, "ORDER001")
         result = validate_patch(fs, audit, patch, tool_version="0.1.0")
         assert result.ok is True, result.failures
+
+
+# ---------------------------------------------------------------------------
+# R5 — Advise (embedded AI scout; fixture judgment)
+# ---------------------------------------------------------------------------
+
+
+class TestRelease5Advise:
+    def test_advise_requires_bridge(self, tmp_path: Path):
+        demo = tmp_path / "empty-advise"
+        demo.mkdir()
+        (demo / "AGENTS.md").write_text("# Role\n", encoding="utf-8")
+        env = dict(os.environ)
+        env.pop("PSA_ADVISE_CMD", None)
+        env.pop("PSA_ADVISE_JUDGMENT", None)
+        env["PYTHONPATH"] = str(SCRIPTS) + os.pathsep + env.get("PYTHONPATH", "")
+        env["PSA_NONINTERACTIVE"] = "1"
+        proc = subprocess.run(
+            [sys.executable, "-m", "psa", "advise", str(demo)],
+            cwd=str(SCRIPTS),
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
+            stdin=subprocess.DEVNULL,
+        )
+        assert proc.returncode == 2
+        assert "embedded AI" in proc.stderr.lower() or "Advise requires" in proc.stderr
+
+    def test_advise_with_judgment_fixture(self, tmp_path: Path):
+        src = FIXTURES / "order_apply"
+        demo = tmp_path / "advise-demo"
+        shutil.copytree(src, demo)
+        judgment = FIXTURES / "advise_judgment.json"
+        proc = _cli("advise", str(demo), "--judgment", str(judgment))
+        assert proc.returncode == 0, proc.stderr + proc.stdout
+        assert "Prompt Structure Advise" in proc.stdout
+        assert "Advisory Recommendations" in proc.stdout
+        assert "Investigation Points" in proc.stdout
+        assert "conflict" in proc.stdout
+        assert (demo / ".psa" / "advise.json").is_file()
+        status = (demo / "PSA_STATUS.md").read_text(encoding="utf-8")
+        assert "Advise Backlog" in status
+
+    def test_advise_brief_only(self, tmp_path: Path):
+        demo = tmp_path / "brief"
+        demo.mkdir()
+        (demo / "AGENTS.md").write_text("# Role\n", encoding="utf-8")
+        proc = _cli("advise", str(demo), "--brief-only")
+        assert proc.returncode == 0, proc.stderr
+        data = json.loads(proc.stdout)
+        assert data["schema"] == "psa.advise.brief.v1"
+        assert "rule_catalog" in data
+
+    def test_apply_one_liner_when_bridge_set(self, tmp_path: Path):
+        src = FIXTURES / "order_apply"
+        demo = tmp_path / "apply-advise"
+        shutil.copytree(src, demo)
+        subprocess.run(["git", "init"], cwd=demo, check=True, capture_output=True)
+        subprocess.run(["git", "add", "-A"], cwd=demo, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-m", "init"],
+            cwd=demo,
+            check=True,
+            capture_output=True,
+        )
+        env = dict(os.environ)
+        env["PYTHONPATH"] = str(SCRIPTS) + os.pathsep + env.get("PYTHONPATH", "")
+        env["PSA_NONINTERACTIVE"] = "1"
+        env["PSA_ADVISE_JUDGMENT"] = str(FIXTURES / "advise_judgment.json")
+        proc = subprocess.run(
+            [sys.executable, "-m", "psa", "apply", "--step", "1", str(demo)],
+            cwd=str(SCRIPTS),
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
+        )
+        assert proc.returncode == 0, proc.stderr + proc.stdout
+        assert "run psa advise" in proc.stdout
+        assert "activation clarity" in proc.stdout.lower() or "Possible missing" in proc.stdout
 
 
 # ---------------------------------------------------------------------------

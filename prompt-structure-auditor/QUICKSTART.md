@@ -16,10 +16,11 @@ CLI package: **`psa`** (under `prompt-structure-auditor/scripts/`)
 | **`psa apply --step N`** | Safely apply one recommendation |
 | **`psa apply`** | Continue optimisation (confirm between steps) |
 | **`psa apply --dangerous`** | Continue without confirmation (validation still runs) |
+| **`psa advise`** | What else is worth investigating beyond current rules? |
 | **`psa doctor`** | Why was (or wasn't) something analysed? |
 | `psa baseline` / `diff` | Continuous comparison (R6) |
 
-**Product principle:** Audit → Plan → Preview → Apply. Validation is internal to Apply. Preview never emits patches. Apply uses pluggable executors (ORDER001 today) on branch `psa/optimise`, and updates `.psa/state.json` + `PSA_STATUS.md`.
+**Product principle:** Audit → Plan → Preview → Apply, with optional **Advise** anytime (and after Apply when an embedded AI bridge is available). Validation is internal to Apply. Preview never emits patches. Apply uses pluggable executors (ORDER001 today) on branch `psa/optimise`, and updates `.psa/state.json` + `PSA_STATUS.md`. Advise writes `.psa/advise.json` (promotable backlog; never auto-applied).
 
 ### Architectural assets (mutually exclusive)
 
@@ -130,6 +131,32 @@ Preview is read-only. It never emits unified diffs, patches, or validation outpu
 
 ---
 
+## Release 5 advise UX contract
+
+`psa advise` is a **separate scout** that finds gaps beyond the deterministic rule set. Judgment comes from an **embedded AI caller** (skill agent / `PSA_ADVISE_CMD` / `PSA_ADVISE_JUDGMENT` / `--judgment`) — PSA does not own an LLM API.
+
+### Report shape (`Prompt Structure Advise`)
+
+1. **Summary** (Repository, Advisory items, Investigation points, Status)
+2. **Advisory Recommendations** (Step | Kind | Recommendation | Effort | Paths)
+3. **Investigation Points** (same columns; `kind=conflict` when AI contradicts deterministic rules)
+4. **Recommendation Details** + promotion footer
+
+### Bridge
+
+| Source | Use |
+|--------|-----|
+| `--brief-only` | Deterministic brief JSON for the caller AI |
+| `--judgment PATH` | Render + persist from judgment JSON |
+| `PSA_ADVISE_JUDGMENT` | Path or inline JSON |
+| `PSA_ADVISE_CMD` | Command: brief on stdin → judgment on stdout |
+
+Without a bridge, `psa advise` exits 2: `Advise requires an embedded AI caller.`
+
+After Apply, if a bridge is available, the Apply report may include one thematic line (`… - run psa advise`). Missing bridge never fails Apply.
+
+---
+
 ## Where we are (release map)
 
 | Release | Outcome | Status |
@@ -137,7 +164,8 @@ Preview is read-only. It never emits unified diffs, patches, or validation outpu
 | **R1 – Audit** | Health report (frozen UX) | **Complete** |
 | **R2 – Plan** | `psa plan` frozen Recommended Plan | **Complete** |
 | **R3 – Preview** | Semantic implementation preview | **Complete** |
-| **R4/R5 – Apply** | Optimisation engine + persistent state | **Complete** |
+| **R4 – Apply** | Optimisation engine + persistent state | **Complete** |
+| **R5 – Advise** | Embedded-AI scout + `.psa/advise.json` | **Complete** |
 | **R6 – Continuous** | Baseline / diff / CI | Ready |
 
 ---
@@ -162,7 +190,8 @@ python -m pytest
 2. Run **`psa plan`** when the user asks what to fix / prioritisation  
 3. Run **`psa preview`** / **`psa preview --step N`** for implementation intent  
 4. Run **`psa apply --step N`** when the user wants to execute  
-5. If discovery looks wrong → **`psa doctor`**  
+5. After Apply (skill): run **Advise** and show the one-line theme; offer full report  
+6. If discovery looks wrong → **`psa doctor`**  
 
 | You say | Command |
 |---------|---------|
@@ -172,6 +201,8 @@ python -m pytest
 | `preview --step N` | `python -m psa preview --step N <PATH>` |
 | `apply --step N` | `python -m psa apply --step N <PATH>` |
 | `apply --dangerous` | `python -m psa apply --dangerous <PATH>` |
+| `advise --brief-only` | `python -m psa advise <PATH> --brief-only` |
+| `advise --judgment` | `python -m psa advise <PATH> --judgment judgment.json` |
 | `doctor` | `python -m psa doctor <PATH>` |
 
 ---
@@ -184,6 +215,8 @@ python -m psa plan .            # advisor — separate from audit
 python -m psa preview .         # implementation overview
 python -m psa preview --step 1  # one recommendation in detail
 python -m psa apply --step 1    # apply one recommendation (git repo)
+python -m psa advise . --brief-only
+python -m psa advise . --judgment judgment.json
 python -m psa doctor .          # diagnostics only
 python -m psa audit . --format json
 ```
@@ -213,15 +246,17 @@ Findings
 
 ---
 
-## Apply + continuous (R4/R5 + R6)
+## Apply + Advise + continuous (R4/R5 + R6)
 
 ```powershell
 python -m psa apply --step 1 .
 python -m psa apply --dangerous .
+python -m psa advise . --brief-only
+python -m psa advise . --judgment .\tests\fixtures\advise_judgment.json
 python -m psa baseline save . --out .psa-baseline.json
 python -m psa diff . --baseline .psa-baseline.json --fail-on-introduced
 ```
 
-Apply writes commits on `psa/optimise`, updates `.psa/state.json` and `PSA_STATUS.md`. Unsupported recommendation types are skipped cleanly (no executor yet).
+Apply writes commits on `psa/optimise`, updates `.psa/state.json` and `PSA_STATUS.md`. Unsupported recommendation types are skipped cleanly (no executor yet). Advise persists `.psa/advise.json` and an Advise Backlog section in `PSA_STATUS.md`.
 
 See [MANUAL_TEST.md](MANUAL_TEST.md).

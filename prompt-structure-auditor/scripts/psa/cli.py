@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from psa.apply.engine import run_apply
+from psa.advise.engine import run_advise
 from psa.core.canon import dumps
 from psa.core.config import DEFAULT_CONFIG, ConfigView
 from psa.core.pipeline import analyze
@@ -40,7 +41,7 @@ def main(argv: list[str] | None = None) -> int:
         prog="psa",
         description=(
             "Prompt Structure Auditor — "
-            "audit · plan · preview · apply · doctor"
+            "audit · plan · preview · apply · advise · doctor"
         ),
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -95,6 +96,26 @@ def main(argv: list[str] | None = None) -> int:
         help="Continuous apply without confirmation (validation still runs)",
     )
     _add_ignore_flag(p_apply)
+
+    p_advise = sub.add_parser(
+        "advise",
+        help="What else is worth investigating beyond current rules? (AI scout)",
+    )
+    p_advise.add_argument("path", nargs="?", default=".", help="Repository path")
+    p_advise.add_argument(
+        "--brief-only",
+        action="store_true",
+        help="Emit deterministic Advise brief JSON only (no AI judgment)",
+    )
+    p_advise.add_argument(
+        "--judgment",
+        default=None,
+        metavar="PATH",
+        help="Path to embedded-AI judgment JSON",
+    )
+    p_advise.add_argument("--format", choices=("text", "json"), default="text")
+    p_advise.add_argument("--out", default=None, help="Write output to file")
+    _add_ignore_flag(p_advise)
 
     p_doc = sub.add_parser(
         "doctor",
@@ -218,6 +239,42 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         print(session.report, end="")
         return session.exit_code
+
+    if args.cmd == "advise":
+        root = Path(args.path).resolve()
+        if not root.exists():
+            print(f"path not found: {root}", file=sys.stderr)
+            return 2
+        judgment_path = Path(args.judgment).resolve() if args.judgment else None
+        if judgment_path is not None and not judgment_path.is_file():
+            print(f"judgment file not found: {judgment_path}", file=sys.stderr)
+            return 2
+        result = run_advise(
+            root,
+            config=cfg,
+            judgment_path=judgment_path,
+            brief_only=args.brief_only,
+            consider_stdin=not args.brief_only and judgment_path is None,
+        )
+        if args.brief_only:
+            out = dumps(result.brief)
+            if args.out:
+                Path(args.out).write_text(out, encoding="utf-8")
+            else:
+                print(out, end="")
+            return 0
+        if result.exit_code != 0:
+            print(result.error or "Advise failed.", file=sys.stderr)
+            return result.exit_code
+        if args.format == "json":
+            out = dumps(result.judgment.to_dict())
+        else:
+            out = result.report
+        if args.out:
+            Path(args.out).write_text(out, encoding="utf-8")
+        else:
+            print(out, end="")
+        return 0
 
     root = Path(args.path).resolve()
     if not root.exists():

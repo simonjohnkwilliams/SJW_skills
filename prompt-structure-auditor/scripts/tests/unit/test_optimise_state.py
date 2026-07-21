@@ -40,3 +40,4 @@ def test_status_md_contains_sections():
     assert "# PSA Status" in text
     assert "Completed Optimisations" in text
     assert "Outstanding Recommendations" in text
+    assert "Advise Backlog" in text

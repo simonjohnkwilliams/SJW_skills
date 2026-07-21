@@ -56,6 +56,7 @@ class ApplySessionResult:
     mode: str = "Interactive"  # Interactive | Continuous | Dangerous
     duration_seconds: float | None = None
     health_improved: bool = False
+    advise_one_liner: str = ""
 
 
 def run_apply(
@@ -112,7 +113,7 @@ def run_apply(
             )
         )
         result.duration_seconds = time.perf_counter() - started
-        result.report = render_apply_report(result, repo_name=repo_display_name(root))
+        _finalize_report(result, root, cfg, tool_version)
         return result
 
     if step is not None:
@@ -202,8 +203,26 @@ def run_apply(
     result.state = state
     result.health_improved = findings_before > 0 and not audit.findings
     result.duration_seconds = time.perf_counter() - started
-    result.report = render_apply_report(result, repo_name=repo_display_name(root))
+    _finalize_report(result, root, cfg, tool_version)
     return result
+
+
+def _finalize_report(
+    result: ApplySessionResult,
+    root: Path,
+    cfg: ConfigView,
+    tool_version: str | None,
+) -> None:
+    if result.exit_code == 0:
+        try:
+            from psa.advise.engine import try_post_apply_one_liner
+
+            result.advise_one_liner = try_post_apply_one_liner(
+                root, config=cfg, tool_version=tool_version
+            )
+        except Exception:  # noqa: BLE001
+            result.advise_one_liner = ""
+    result.report = render_apply_report(result, repo_name=repo_display_name(root))
 
 
 def _apply_one(

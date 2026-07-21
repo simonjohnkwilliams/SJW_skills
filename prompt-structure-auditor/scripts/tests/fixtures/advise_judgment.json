@@ -1,0 +1,27 @@
+{
+  "summary_theme": "Possible missing activation clarity in .cursor/rules",
+  "notes": "Fixture judgment for CI — no live model.",
+  "items": [
+    {
+      "id": "ADV001",
+      "kind": "advise",
+      "title": "Clarify when Cursor rules should activate",
+      "reason": "Several rules lack clear activation intent beyond the deterministic ACT checks.",
+      "paths": [".cursor/rules"],
+      "effort": "Medium",
+      "rule_seed_id": "ACT003",
+      "rule_seed_idea": "Flag rules whose description is empty and globs are absent"
+    },
+    {
+      "id": "ADV002",
+      "kind": "conflict",
+      "title": "AI suggests reordering that ORDER001 already covers",
+      "reason": "Embedded judgment proposed moving volatile sections; deterministic ORDER001 already tracks this.",
+      "paths": ["AGENTS.md"],
+      "effort": "Small",
+      "conflicts_with": ["ORDER001"],
+      "rule_seed_id": "",
+      "rule_seed_idea": ""
+    }
+  ]
+}
